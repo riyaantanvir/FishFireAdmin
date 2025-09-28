@@ -36,12 +36,21 @@ const itemFormSchema = z.object({
   itemType: z.enum(["Fish", "Non-Fish", "Drinks", "Other"], {
     required_error: "Please select an item type",
   }),
+  itemSaleType: z.enum(["Per KG", "Per PCS"], {
+    required_error: "Please select a sale type",
+  }),
+  weightPerPCS: z.number().min(0.001, "Weight per PCS must be positive").optional(),
   sellingPricePerKG: z.number().min(0, "Price must be positive").optional(),
   sellingPricePerPCS: z.number().min(0, "Price must be positive").optional(),
 }).refine(
-  (data) => data.sellingPricePerKG || data.sellingPricePerPCS,
+  (data) => {
+    if (data.itemSaleType === "Per PCS") {
+      return data.weightPerPCS && data.sellingPricePerKG;
+    }
+    return data.sellingPricePerKG || data.sellingPricePerPCS;
+  },
   {
-    message: "At least one selling price (per KG or per PCS) must be provided",
+    message: "For Per PCS items, provide Weight per PCS and Selling Price per KG. For Per KG items, provide at least one selling price.",
     path: ["sellingPricePerKG"],
   }
 );
@@ -71,6 +80,8 @@ export default function ItemManagement() {
       date: new Date().toISOString().split('T')[0],
       name: "",
       itemType: undefined,
+      itemSaleType: undefined,
+      weightPerPCS: undefined,
       sellingPricePerKG: undefined,
       sellingPricePerPCS: undefined,
     },
@@ -82,6 +93,8 @@ export default function ItemManagement() {
       date: new Date().toISOString().split('T')[0],
       name: "",
       itemType: undefined,
+      itemSaleType: undefined,
+      weightPerPCS: undefined,
       sellingPricePerKG: undefined,
       sellingPricePerPCS: undefined,
     },
@@ -94,10 +107,12 @@ export default function ItemManagement() {
         date: data.date,
         name: data.name,
         itemType: data.itemType,
+        itemSaleType: data.itemSaleType,
+        weightPerPCS: data.weightPerPCS?.toString() || null,
         sellingPricePerKG: data.sellingPricePerKG?.toString() || null,
         sellingPricePerPCS: data.sellingPricePerPCS?.toString() || null,
         // Legacy fields for compatibility
-        description: `${data.itemType} item`,
+        description: `${data.itemType} item - ${data.itemSaleType}`,
         price: (data.sellingPricePerKG || data.sellingPricePerPCS || 0).toString(),
         stock: 0,
         category: data.itemType,
@@ -113,6 +128,8 @@ export default function ItemManagement() {
         date: new Date().toISOString().split('T')[0],
         name: "",
         itemType: undefined,
+        itemSaleType: undefined,
+        weightPerPCS: undefined,
         sellingPricePerKG: undefined,
         sellingPricePerPCS: undefined,
       });
@@ -136,10 +153,12 @@ export default function ItemManagement() {
         date: data.date,
         name: data.name,
         itemType: data.itemType,
+        itemSaleType: data.itemSaleType,
+        weightPerPCS: data.weightPerPCS?.toString() || null,
         sellingPricePerKG: data.sellingPricePerKG?.toString() || null,
         sellingPricePerPCS: data.sellingPricePerPCS?.toString() || null,
         // Update legacy fields for compatibility
-        description: `${data.itemType} item`,
+        description: `${data.itemType} item - ${data.itemSaleType}`,
         price: (data.sellingPricePerKG || data.sellingPricePerPCS || 0).toString(),
         category: data.itemType,
       };
@@ -200,7 +219,9 @@ export default function ItemManagement() {
     editForm.reset({
       date: item.date || new Date().toISOString().split('T')[0],
       name: item.name,
-      itemType: item.itemType || item.category,
+      itemType: (item.itemType || item.category) as "Fish" | "Non-Fish" | "Drinks" | "Other",
+      itemSaleType: (item.itemSaleType || "Per KG") as "Per KG" | "Per PCS",
+      weightPerPCS: item.weightPerPCS ? parseFloat(item.weightPerPCS) : undefined,
       sellingPricePerKG: item.sellingPricePerKG ? parseFloat(item.sellingPricePerKG) : undefined,
       sellingPricePerPCS: item.sellingPricePerPCS ? parseFloat(item.sellingPricePerPCS) : undefined,
     });
@@ -316,6 +337,55 @@ export default function ItemManagement() {
                     </FormItem>
                   )}
                 />
+
+                {/* Item Sale Type */}
+                <FormField
+                  control={form.control}
+                  name="itemSaleType"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Item Sale Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-item-sale-type">
+                            <SelectValue placeholder="Select sale type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="Per KG">Per KG</SelectItem>
+                          <SelectItem value="Per PCS">Per PCS</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Weight per PCS (only show when Per PCS is selected) */}
+                {form.watch("itemSaleType") === "Per PCS" && (
+                  <FormField
+                    control={form.control}
+                    name="weightPerPCS"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Weight per PCS (KG)</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="number"
+                            step="0.001"
+                            min="0"
+                            placeholder="0.000"
+                            data-testid="input-weight-per-pcs"
+                            {...field}
+                            onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                            value={field.value || ""}
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
 
                 {/* Selling Price per KG */}
                 <FormField
@@ -435,8 +505,9 @@ export default function ItemManagement() {
                   <TableHead>Item Number</TableHead>
                   <TableHead>Item Name</TableHead>
                   <TableHead>Item Type</TableHead>
-                  <TableHead>Selling Price per KG</TableHead>
-                  <TableHead>Selling Price per PCS</TableHead>
+                  <TableHead>Sale Type</TableHead>
+                  <TableHead>Weight per PCS</TableHead>
+                  <TableHead>Price per KG</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -451,15 +522,18 @@ export default function ItemManagement() {
                     <TableCell>{item.name}</TableCell>
                     <TableCell>{item.itemType || item.category}</TableCell>
                     <TableCell>
-                      {isSoldPerKG(item) ? (
-                        <span className="font-medium">${item.sellingPricePerKG}</span>
+                      <span className="font-medium">{item.itemSaleType || 'Per KG'}</span>
+                    </TableCell>
+                    <TableCell>
+                      {item.itemSaleType === "Per PCS" && item.weightPerPCS ? (
+                        <span className="font-medium">{item.weightPerPCS} KG</span>
                       ) : (
                         <X className="h-4 w-4 text-muted-foreground" />
                       )}
                     </TableCell>
                     <TableCell>
-                      {isSoldPerPCS(item) ? (
-                        <span className="font-medium">${item.sellingPricePerPCS}</span>
+                      {item.sellingPricePerKG ? (
+                        <span className="font-medium">${item.sellingPricePerKG}</span>
                       ) : (
                         <X className="h-4 w-4 text-muted-foreground" />
                       )}

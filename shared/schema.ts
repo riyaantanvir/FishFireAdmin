@@ -27,6 +27,8 @@ export const items = pgTable("items", {
   date: text("date").notNull(), // User-specified date
   name: text("name").notNull(),
   itemType: text("item_type").notNull(), // Fish / Non-Fish / Drinks / Other
+  itemSaleType: text("item_sale_type").notNull(), // Per KG / Per PCS
+  weightPerPCS: decimal("weight_per_pcs", { precision: 10, scale: 3 }), // Weight in KG when sold per PCS
   sellingPricePerKG: decimal("selling_price_per_kg", { precision: 10, scale: 2 }),
   sellingPricePerPCS: decimal("selling_price_per_pcs", { precision: 10, scale: 2 }),
   // Legacy fields for compatibility
