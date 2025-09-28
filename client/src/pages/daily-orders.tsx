@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,51 +12,122 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Eye, Trash2 } from "lucide-react";
+import { Search, Trash2 } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { insertOrderSchema } from "@shared/schema";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Order } from "@shared/schema";
+import type { Order, Item } from "@shared/schema";
 import { z } from "zod";
 
-const orderFormSchema = insertOrderSchema.extend({
-  items: z.string().min(1, "Items are required"),
+// Form schema for the inline order entry
+const orderEntrySchema = z.object({
+  customerName: z.string().min(1, "Customer name is required"),
+  selectedItemId: z.string().min(1, "Please select an item"),
+  quantity: z.number().min(1, "Quantity must be at least 1"),
+  price: z.number().min(0, "Price must be positive"),
+  discountAmount: z.number().min(0, "Discount amount must be positive").optional(),
+  discountPercentage: z.number().min(0).max(100, "Discount percentage must be between 0-100").optional(),
 });
+
+type OrderEntryForm = z.infer<typeof orderEntrySchema>;
 
 export default function DailyOrders() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  const { data: orders = [], isLoading } = useQuery<Order[]>({
+  // Fetch orders and items
+  const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
   });
 
+  const { data: items = [], isLoading: itemsLoading } = useQuery<Item[]>({
+    queryKey: ["/api/items"],
+  });
+
+  const form = useForm<OrderEntryForm>({
+    resolver: zodResolver(orderEntrySchema),
+    defaultValues: {
+      customerName: "",
+      selectedItemId: "",
+      quantity: 1,
+      price: 0,
+      discountAmount: 0,
+      discountPercentage: 0,
+    },
+  });
+
+  // Watch form values for auto-calculation
+  const watchedValues = form.watch();
+  const [finalTotal, setFinalTotal] = useState(0);
+
+  // Auto-calculate final total when values change
+  useEffect(() => {
+    const { quantity, price, discountAmount = 0, discountPercentage = 0 } = watchedValues;
+    
+    if (quantity && price) {
+      let total = quantity * price;
+      
+      // Apply percentage discount first
+      if (discountPercentage > 0) {
+        total = total * (1 - discountPercentage / 100);
+      }
+      
+      // Then apply amount discount
+      if (discountAmount > 0) {
+        total = Math.max(0, total - discountAmount);
+      }
+      
+      setFinalTotal(Math.round(total * 100) / 100);
+    }
+  }, [watchedValues]);
+
+  // Auto-fill price when item is selected
+  const handleItemSelect = (itemId: string) => {
+    const selectedItem = items.find(item => item.id === itemId);
+    if (selectedItem) {
+      form.setValue("price", parseFloat(selectedItem.price));
+    }
+  };
+
   const createOrderMutation = useMutation({
-    mutationFn: async (data: z.infer<typeof orderFormSchema>) => {
-      const response = await apiRequest("POST", "/api/orders", data);
+    mutationFn: async (data: OrderEntryForm) => {
+      const selectedItem = items.find(item => item.id === data.selectedItemId);
+      
+      // Format order data
+      const orderData = {
+        orderNumber: `ORD-${Date.now()}`,
+        customerName: data.customerName,
+        items: JSON.stringify([{
+          id: data.selectedItemId,
+          name: selectedItem?.name || "Unknown Item",
+          quantity: data.quantity,
+          price: data.price,
+          discountAmount: data.discountAmount || 0,
+          discountPercentage: data.discountPercentage || 0,
+        }]),
+        totalAmount: finalTotal.toString(),
+        status: "pending",
+      };
+
+      const response = await apiRequest("POST", "/api/orders", orderData);
       return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      setIsCreateDialogOpen(false);
-      form.reset();
+      form.reset({
+        customerName: "",
+        selectedItemId: "",
+        quantity: 1,
+        price: 0,
+        discountAmount: 0,
+        discountPercentage: 0,
+      });
+      setFinalTotal(0);
       toast({
         title: "Success",
         description: "Order created successfully",
@@ -105,17 +176,6 @@ export default function DailyOrders() {
     },
   });
 
-  const form = useForm<z.infer<typeof orderFormSchema>>({
-    resolver: zodResolver(orderFormSchema),
-    defaultValues: {
-      orderNumber: "",
-      customerName: "",
-      items: "",
-      totalAmount: "",
-      status: "pending",
-    },
-  });
-
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -123,13 +183,16 @@ export default function DailyOrders() {
     return matchesSearch && matchesStatus;
   });
 
-  const onSubmit = (values: z.infer<typeof orderFormSchema>) => {
-    // Generate order number if not provided
-    const orderNumber = values.orderNumber || `ORD-${Date.now()}`;
-    createOrderMutation.mutate({
-      ...values,
-      orderNumber,
-    });
+  const onSubmit = (values: OrderEntryForm) => {
+    if (finalTotal <= 0) {
+      toast({
+        title: "Error",
+        description: "Total amount must be greater than 0",
+        variant: "destructive",
+      });
+      return;
+    }
+    createOrderMutation.mutate(values);
   };
 
   const getStatusColor = (status: string) => {
@@ -145,7 +208,33 @@ export default function DailyOrders() {
     }
   };
 
-  if (isLoading) {
+  const formatOrderItems = (itemsString: string) => {
+    try {
+      const items = JSON.parse(itemsString);
+      return items.map((item: any) => 
+        `${item.name} (${item.quantity}x @ ${item.price})`
+      ).join(', ');
+    } catch {
+      return itemsString;
+    }
+  };
+
+  const getOrderDiscount = (itemsString: string) => {
+    try {
+      const items = JSON.parse(itemsString);
+      const item = items[0]; // Assuming single item orders for now
+      if (item?.discountAmount > 0) {
+        return `TK ${item.discountAmount}`;
+      } else if (item?.discountPercentage > 0) {
+        return `${item.discountPercentage}%`;
+      }
+      return "None";
+    } catch {
+      return "None";
+    }
+  };
+
+  if (ordersLoading || itemsLoading) {
     return (
       <div className="space-y-6">
         <div className="h-8 bg-muted rounded w-1/4 animate-pulse" />
@@ -157,44 +246,21 @@ export default function DailyOrders() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h2 className="text-2xl font-bold text-foreground">Daily Orders</h2>
-          <p className="text-muted-foreground">Manage and track customer orders</p>
-        </div>
-        <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-          <DialogTrigger asChild>
-            <Button data-testid="button-create-order">
-              <Plus className="h-4 w-4 mr-2" />
-              Create Order
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Create New Order</DialogTitle>
-              <DialogDescription>
-                Add a new customer order to the system.
-              </DialogDescription>
-            </DialogHeader>
-            <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-                <FormField
-                  control={form.control}
-                  name="orderNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Order Number (Optional)</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Auto-generated if empty"
-                          data-testid="input-order-number"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+      <div>
+        <h2 className="text-2xl font-bold text-foreground">Daily Orders</h2>
+        <p className="text-muted-foreground">Quick order entry and management</p>
+      </div>
+
+      {/* Inline Order Entry Form */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Create New Order</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Form {...form}>
+            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {/* Customer Name */}
                 <FormField
                   control={form.control}
                   name="customerName"
@@ -212,58 +278,154 @@ export default function DailyOrders() {
                     </FormItem>
                   )}
                 />
+
+                {/* Select Item */}
                 <FormField
                   control={form.control}
-                  name="items"
+                  name="selectedItemId"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Items (JSON format)</FormLabel>
+                      <FormLabel>Select Item</FormLabel>
+                      <Select onValueChange={(value) => {
+                        field.onChange(value);
+                        handleItemSelect(value);
+                      }} value={field.value}>
+                        <FormControl>
+                          <SelectTrigger data-testid="select-item">
+                            <SelectValue placeholder="Choose an item" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          {items.filter(item => item.isActive === "true").map((item) => (
+                            <SelectItem key={item.id} value={item.id}>
+                              {item.name} - ${item.price}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Quantity */}
+                <FormField
+                  control={form.control}
+                  name="quantity"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Quantity</FormLabel>
                       <FormControl>
-                        <Textarea 
-                          placeholder='[{"name": "Salmon", "quantity": 2, "price": 25.50}]'
-                          data-testid="input-items"
-                          {...field} 
+                        <Input 
+                          type="number"
+                          min="1"
+                          placeholder="1"
+                          data-testid="input-quantity"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                {/* Price */}
                 <FormField
                   control={form.control}
-                  name="totalAmount"
+                  name="price"
                   render={({ field }) => (
                     <FormItem>
-                      <FormLabel>Total Amount</FormLabel>
+                      <FormLabel>Price (per unit)</FormLabel>
                       <FormControl>
                         <Input 
                           type="number"
                           step="0.01"
+                          min="0"
                           placeholder="0.00"
-                          data-testid="input-total-amount"
-                          {...field} 
+                          data-testid="input-price"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value))}
                         />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
-                <DialogFooter>
+
+                {/* Discount Amount */}
+                <FormField
+                  control={form.control}
+                  name="discountAmount"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Amount (TK)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.01"
+                          min="0"
+                          placeholder="0.00"
+                          data-testid="input-discount-amount"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Discount Percentage */}
+                <FormField
+                  control={form.control}
+                  name="discountPercentage"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Discount Percentage (%)</FormLabel>
+                      <FormControl>
+                        <Input 
+                          type="number"
+                          step="0.1"
+                          min="0"
+                          max="100"
+                          placeholder="0"
+                          data-testid="input-discount-percentage"
+                          {...field}
+                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+
+                {/* Final Total (Display Only) */}
+                <div className="space-y-2">
+                  <Label>Final Total</Label>
+                  <div className="h-10 px-3 py-2 border rounded-md bg-muted flex items-center font-medium text-lg">
+                    ${finalTotal.toFixed(2)}
+                  </div>
+                </div>
+
+                {/* Submit Button */}
+                <div className="flex items-end">
                   <Button 
                     type="submit" 
+                    className="w-full"
                     disabled={createOrderMutation.isPending}
-                    data-testid="button-submit-order"
+                    data-testid="button-create-order"
                   >
                     Create Order
                   </Button>
-                </DialogFooter>
-              </form>
-            </Form>
-          </DialogContent>
-        </Dialog>
-      </div>
+                </div>
+              </div>
+            </form>
+          </Form>
+        </CardContent>
+      </Card>
 
-      {/* Filters */}
+      {/* Search and Filter */}
       <Card>
         <CardContent className="p-4">
           <div className="flex gap-4 items-center">
@@ -303,7 +465,7 @@ export default function DailyOrders() {
               {orders.length === 0 ? (
                 <div>
                   <p className="text-lg font-medium mb-2">No orders yet</p>
-                  <p>Create your first order to get started.</p>
+                  <p>Create your first order using the form above.</p>
                 </div>
               ) : (
                 <p>No orders match your search criteria.</p>
@@ -314,11 +476,12 @@ export default function DailyOrders() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Order Number</TableHead>
-                  <TableHead>Customer</TableHead>
+                  <TableHead>Customer Name</TableHead>
                   <TableHead>Items</TableHead>
-                  <TableHead>Total</TableHead>
+                  <TableHead>Discount</TableHead>
+                  <TableHead>Final Total</TableHead>
+                  <TableHead>Date/Time</TableHead>
                   <TableHead>Status</TableHead>
-                  <TableHead>Date</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -327,34 +490,14 @@ export default function DailyOrders() {
                   <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
                     <TableCell>{order.customerName}</TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        data-testid={`button-view-items-${order.id}`}
-                        onClick={() => {
-                          try {
-                            const items = JSON.parse(order.items);
-                            const itemsList = items.map((item: any) => 
-                              `${item.name} (${item.quantity}x)`
-                            ).join(', ');
-                            toast({
-                              title: "Order Items",
-                              description: itemsList || "No items found",
-                            });
-                          } catch {
-                            toast({
-                              title: "Order Items",
-                              description: order.items,
-                            });
-                          }
-                        }}
-                      >
-                        <Eye className="h-4 w-4 mr-1" />
-                        View
-                      </Button>
+                    <TableCell className="max-w-xs truncate">
+                      {formatOrderItems(order.items)}
                     </TableCell>
-                    <TableCell>${order.totalAmount}</TableCell>
+                    <TableCell>{getOrderDiscount(order.items)}</TableCell>
+                    <TableCell className="font-medium">${order.totalAmount}</TableCell>
+                    <TableCell>
+                      {order.createdAt ? new Date(order.createdAt).toLocaleString() : 'N/A'}
+                    </TableCell>
                     <TableCell>
                       <Select
                         value={order.status}
@@ -373,9 +516,6 @@ export default function DailyOrders() {
                           <SelectItem value="cancelled">Cancelled</SelectItem>
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                    <TableCell>
-                      {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                     </TableCell>
                     <TableCell>
                       <Button
