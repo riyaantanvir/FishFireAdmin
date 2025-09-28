@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Edit, Trash2, X } from "lucide-react";
+import { Search, Edit, Trash2, X, Download, Upload, FileText } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -249,6 +249,253 @@ export default function ItemManagement() {
     return item.sellingPricePerPCS && parseFloat(item.sellingPricePerPCS) > 0;
   };
 
+  // CSV Template Download
+  const downloadTemplate = () => {
+    const headers = [
+      'date',
+      'name', 
+      'itemType',
+      'itemSaleType',
+      'weightPerPCS',
+      'sellingPricePerKG',
+      'sellingPricePerPCS',
+      'description',
+      'stock',
+      'category',
+      'isActive'
+    ];
+
+    const exampleRows = [
+      [
+        '2025-09-28',
+        'Hilsha Fish',
+        'Fish',
+        'Per PCS',
+        '0.8',
+        '500',
+        '',
+        'Fresh Hilsha fish',
+        '10',
+        'Fish',
+        'true'
+      ],
+      [
+        '2025-09-28',
+        'Salmon',
+        'Fish', 
+        'Per KG',
+        '',
+        '800',
+        '640',
+        'Fresh salmon',
+        '5',
+        'Fish',
+        'true'
+      ]
+    ];
+
+    const csvContent = [
+      headers.join(','),
+      ...exampleRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = 'items_template.csv';
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast({
+      title: "Success",
+      description: "Template downloaded successfully",
+    });
+  };
+
+  // Export to CSV
+  const exportToCSV = () => {
+    if (items.length === 0) {
+      toast({
+        title: "No data to export",
+        description: "Please add some items first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const headers = [
+      'date',
+      'name',
+      'itemType', 
+      'itemSaleType',
+      'weightPerPCS',
+      'sellingPricePerKG',
+      'sellingPricePerPCS',
+      'description',
+      'stock',
+      'category',
+      'isActive'
+    ];
+
+    const csvRows = items.map(item => [
+      item.date || '',
+      item.name || '',
+      item.itemType || item.category || '',
+      item.itemSaleType || 'Per KG',
+      item.weightPerPCS || '',
+      item.sellingPricePerKG || '',
+      item.sellingPricePerPCS || '',
+      item.description || '',
+      item.stock?.toString() || '0',
+      item.category || '',
+      item.isActive || 'true'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `items_export_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+
+    toast({
+      title: "Success", 
+      description: `Exported ${items.length} items successfully`,
+    });
+  };
+
+  // CSV Import Handler
+  const handleImportCSV = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (!file.name.toLowerCase().endsWith('.csv')) {
+      toast({
+        title: "Invalid file type",
+        description: "Please select a CSV file",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const csv = e.target?.result as string;
+        const lines = csv.split('\n').filter(line => line.trim());
+        
+        if (lines.length < 2) {
+          toast({
+            title: "Invalid CSV",
+            description: "CSV file must contain headers and at least one data row",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const expectedHeaders = ['date', 'name', 'itemType', 'itemSaleType', 'weightPerPCS', 'sellingPricePerKG', 'sellingPricePerPCS', 'description', 'stock', 'category', 'isActive'];
+        
+        // Check if basic required headers exist
+        const requiredHeaders = ['name', 'itemType', 'itemSaleType'];
+        const missingRequired = requiredHeaders.filter(header => !headers.includes(header));
+        
+        if (missingRequired.length > 0) {
+          toast({
+            title: "Invalid CSV format",
+            description: `Missing required headers: ${missingRequired.join(', ')}`,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const itemsToImport = [];
+        let errorCount = 0;
+
+        for (let i = 1; i < lines.length; i++) {
+          try {
+            const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+            const itemData: any = {};
+
+            headers.forEach((header, index) => {
+              itemData[header] = values[index] || '';
+            });
+
+            // Validate required fields
+            if (!itemData.name || !itemData.itemType || !itemData.itemSaleType) {
+              errorCount++;
+              continue;
+            }
+
+            // Prepare item for API
+            const newItem: any = {
+              itemNumber: getNextItemNumber() + itemsToImport.length,
+              date: itemData.date || new Date().toISOString().split('T')[0],
+              name: itemData.name,
+              itemType: itemData.itemType,
+              itemSaleType: itemData.itemSaleType,
+              weightPerPCS: itemData.weightPerPCS ? parseFloat(itemData.weightPerPCS) : undefined,
+              sellingPricePerKG: itemData.sellingPricePerKG ? parseFloat(itemData.sellingPricePerKG) : undefined,
+              sellingPricePerPCS: itemData.sellingPricePerPCS ? parseFloat(itemData.sellingPricePerPCS) : undefined,
+              description: itemData.description || '',
+              price: parseFloat(itemData.sellingPricePerKG || itemData.sellingPricePerPCS || '0'),
+              stock: parseInt(itemData.stock) || 0,
+              category: itemData.category || itemData.itemType,
+              isActive: itemData.isActive || 'true',
+            };
+
+            itemsToImport.push(newItem);
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        if (itemsToImport.length === 0) {
+          toast({
+            title: "No valid items found",
+            description: "Please check your CSV format and try again",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        // Import items one by one
+        let successCount = 0;
+        for (const item of itemsToImport) {
+          try {
+            await apiRequest("POST", "/api/items", item);
+            successCount++;
+          } catch (error) {
+            errorCount++;
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["/api/items"] });
+        
+        toast({
+          title: "Import completed",
+          description: `Successfully imported ${successCount} items${errorCount > 0 ? `, ${errorCount} errors` : ''}`,
+        });
+
+      } catch (error) {
+        toast({
+          title: "Import failed",
+          description: "Error processing CSV file",
+          variant: "destructive",
+        });
+      }
+    };
+
+    reader.readAsText(file);
+    // Reset the input
+    event.target.value = '';
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
@@ -261,9 +508,47 @@ export default function ItemManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Item Management</h2>
-        <p className="text-muted-foreground">Manage inventory items with flexible pricing</p>
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-2xl font-bold text-foreground">Item Management</h2>
+          <p className="text-muted-foreground">Manage inventory items with flexible pricing</p>
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={downloadTemplate}
+            data-testid="button-download-template"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Template
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => document.getElementById('csv-import')?.click()}
+            data-testid="button-import-csv"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={exportToCSV}
+            data-testid="button-export-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <input
+            id="csv-import"
+            type="file"
+            accept=".csv"
+            style={{ display: 'none' }}
+            onChange={handleImportCSV}
+          />
+        </div>
       </div>
 
       {/* Create New Item Form */}
