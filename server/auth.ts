@@ -22,11 +22,6 @@ async function hashPassword(password: string) {
 }
 
 async function comparePasswords(supplied: string, stored: string) {
-  // Handle the simple demo case for Admin user
-  if (stored === "Admin.salt" && supplied === "Admin") {
-    return true;
-  }
-  
   const parts = stored.split(".");
   if (parts.length !== 2) {
     return false;

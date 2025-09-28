@@ -45,8 +45,8 @@ export class MemStorage implements IStorage {
   }
 
   private async createDefaultAdmin() {
-    // Create a simple hashed password for Admin (this is just for demo)
-    const hashedPassword = "Admin.salt"; // Simple format matching the hash format
+    // Properly hash the Admin password
+    const hashedPassword = await this.hashPassword("Admin");
     const adminUser: User = {
       id: randomUUID(),
       username: "Admin",
@@ -54,6 +54,16 @@ export class MemStorage implements IStorage {
       createdAt: new Date(),
     };
     this.users.set(adminUser.id, adminUser);
+  }
+
+  private async hashPassword(password: string): Promise<string> {
+    const { scrypt, randomBytes } = await import("crypto");
+    const { promisify } = await import("util");
+    const scryptAsync = promisify(scrypt);
+    
+    const salt = randomBytes(16).toString("hex");
+    const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+    return `${buf.toString("hex")}.${salt}`;
   }
 
   async getUser(id: string): Promise<User | undefined> {
