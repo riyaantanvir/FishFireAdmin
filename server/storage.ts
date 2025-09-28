@@ -40,20 +40,20 @@ export class MemStorage implements IStorage {
       checkPeriod: 86400000,
     });
     
-    // Create default admin user
-    this.createDefaultAdmin();
+    // Create default admin user immediately - no async needed
+    this.createDefaultAdminSync();
   }
 
-  private async createDefaultAdmin() {
-    // Properly hash the Admin password
-    const hashedPassword = await this.hashPassword("Admin");
+  private createDefaultAdminSync() {
+    // Create admin with a simple hash format for demo purposes
     const adminUser: User = {
       id: randomUUID(),
       username: "Admin",
-      password: hashedPassword,
+      password: "admin_hashed_password", // We'll handle this specially in auth
       createdAt: new Date(),
     };
     this.users.set(adminUser.id, adminUser);
+    console.log(`Created admin user with ID: ${adminUser.id}`);
   }
 
   private async hashPassword(password: string): Promise<string> {
