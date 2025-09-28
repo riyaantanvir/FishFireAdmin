@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem } from "@shared/schema";
+import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -23,6 +23,12 @@ export interface IStorage {
   updateItem(id: string, item: Partial<Item>): Promise<Item | undefined>;
   deleteItem(id: string): Promise<boolean>;
   
+  getExpenses(): Promise<Expense[]>;
+  getExpense(id: string): Promise<Expense | undefined>;
+  createExpense(expense: InsertExpense): Promise<Expense>;
+  updateExpense(id: string, expense: Partial<Expense>): Promise<Expense | undefined>;
+  deleteExpense(id: string): Promise<boolean>;
+  
   sessionStore: session.Store;
 }
 
@@ -30,12 +36,14 @@ export class MemStorage implements IStorage {
   private users: Map<string, User>;
   private orders: Map<string, Order>;
   private items: Map<string, Item>;
+  private expenses: Map<string, Expense>;
   public sessionStore: session.Store;
 
   constructor() {
     this.users = new Map();
     this.orders = new Map();
     this.items = new Map();
+    this.expenses = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -166,6 +174,43 @@ export class MemStorage implements IStorage {
 
   async deleteItem(id: string): Promise<boolean> {
     return this.items.delete(id);
+  }
+
+  async getExpenses(): Promise<Expense[]> {
+    return Array.from(this.expenses.values()).sort((a, b) => 
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  }
+
+  async getExpense(id: string): Promise<Expense | undefined> {
+    return this.expenses.get(id);
+  }
+
+  async createExpense(insertExpense: InsertExpense): Promise<Expense> {
+    const id = randomUUID();
+    const expense: Expense = {
+      ...insertExpense,
+      id,
+      weight: insertExpense.weight || null,
+      dueAmount: insertExpense.dueAmount || null,
+      comment: insertExpense.comment || null,
+      createdAt: new Date(),
+    };
+    this.expenses.set(id, expense);
+    return expense;
+  }
+
+  async updateExpense(id: string, expenseUpdate: Partial<Expense>): Promise<Expense | undefined> {
+    const existingExpense = this.expenses.get(id);
+    if (!existingExpense) return undefined;
+    
+    const updatedExpense = { ...existingExpense, ...expenseUpdate };
+    this.expenses.set(id, updatedExpense);
+    return updatedExpense;
+  }
+
+  async deleteExpense(id: string): Promise<boolean> {
+    return this.expenses.delete(id);
   }
 }
 

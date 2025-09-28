@@ -41,6 +41,19 @@ export const items = pgTable("items", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const expenses = pgTable("expenses", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(), // User-specified date
+  personItem: text("person_item").notNull(), // Person or Item name
+  category: text("category").notNull(),
+  weight: decimal("weight", { precision: 10, scale: 3 }), // Optional weight
+  qty: integer("qty").notNull().default(1),
+  amount: decimal("amount", { precision: 10, scale: 2 }).notNull(),
+  dueAmount: decimal("due_amount", { precision: 10, scale: 2 }), // Optional due amount
+  comment: text("comment"), // Optional comment
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -59,9 +72,16 @@ export const insertItemSchema = createInsertSchema(items).omit({
   createdAt: true,
 });
 
+export const insertExpenseSchema = createInsertSchema(expenses).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
 export type Order = typeof orders.$inferSelect;
 export type InsertItem = z.infer<typeof insertItemSchema>;
 export type Item = typeof items.$inferSelect;
+export type InsertExpense = z.infer<typeof insertExpenseSchema>;
+export type Expense = typeof expenses.$inferSelect;
