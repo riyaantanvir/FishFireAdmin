@@ -8,7 +8,8 @@ import {
   BarChart3, 
   Settings,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  DollarSign
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -22,6 +23,7 @@ const navigationItems = [
   { href: "/daily-orders", icon: Calendar, label: "Daily Orders" },
   { href: "/item-management", icon: Package, label: "Item Management" },
   { href: "/order-management", icon: ClipboardList, label: "Order Management" },
+  { href: "/expense-management", icon: DollarSign, label: "Expense Management" },
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
@@ -46,7 +48,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
           </div>
         )}
         
-        {navigationItems.slice(0, 4).map((item) => {
+        {navigationItems.slice(0, 5).map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href;
           
@@ -71,7 +73,7 @@ export function Sidebar({ collapsed, onToggle }: SidebarProps) {
         
         {!collapsed && <hr className="border-border my-4" />}
         
-        {navigationItems.slice(4).map((item) => {
+        {navigationItems.slice(5).map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href;
           

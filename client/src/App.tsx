@@ -12,6 +12,7 @@ import Dashboard from "@/pages/dashboard";
 import DailyOrders from "@/pages/daily-orders";
 import ItemManagement from "@/pages/item-management";
 import OrderManagement from "@/pages/order-management";
+import ExpenseManagement from "@/pages/expense-management";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 
@@ -67,6 +68,14 @@ function Router() {
         component={() => (
           <DashboardLayout>
             <OrderManagement />
+          </DashboardLayout>
+        )} 
+      />
+      <ProtectedRoute 
+        path="/expense-management" 
+        component={() => (
+          <DashboardLayout>
+            <ExpenseManagement />
           </DashboardLayout>
         )} 
       />
