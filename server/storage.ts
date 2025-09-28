@@ -138,6 +138,7 @@ export class MemStorage implements IStorage {
       ...insertOrder,
       id,
       status: insertOrder.status || "pending",
+      paymentStatus: insertOrder.paymentStatus || "Unpaid",
       createdAt: new Date(),
     };
     this.orders.set(id, order);
@@ -312,6 +313,23 @@ export class MemStorage implements IStorage {
     const payment: Payment = {
       ...insertPayment,
       id,
+      cash1000: insertPayment.cash1000 || 0,
+      cash500: insertPayment.cash500 || 0,
+      cash200: insertPayment.cash200 || 0,
+      cash100: insertPayment.cash100 || 0,
+      cash50: insertPayment.cash50 || 0,
+      cash20: insertPayment.cash20 || 0,
+      cash10: insertPayment.cash10 || 0,
+      cash5: insertPayment.cash5 || 0,
+      cash2: insertPayment.cash2 || 0,
+      cash1: insertPayment.cash1 || 0,
+      totalCash: insertPayment.totalCash || "0",
+      bkash: insertPayment.bkash || "0",
+      rocket: insertPayment.rocket || "0",
+      nogod: insertPayment.nogod || "0",
+      card: insertPayment.card || "0",
+      bank: insertPayment.bank || "0",
+      totalDigital: insertPayment.totalDigital || "0",
       createdAt: new Date(),
     };
     this.payments.set(id, payment);

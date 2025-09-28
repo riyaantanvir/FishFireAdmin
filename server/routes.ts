@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, authenticateJWT } from "./auth";
 import { storage } from "./storage";
-import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema } from "@shared/schema";
+import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -242,6 +242,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete closing stock" });
+    }
+  });
+
+  // Payment Management API
+  app.get("/api/payments", authenticateJWT, async (req, res) => {
+    try {
+      const payments = await storage.getPayments();
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch payments" });
+    }
+  });
+
+  app.get("/api/payments/date/:date", authenticateJWT, async (req, res) => {
+    try {
+      const payments = await storage.getPaymentsByDate(req.params.date);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch payments for date" });
+    }
+  });
+
+  app.get("/api/payments/order/:orderId", authenticateJWT, async (req, res) => {
+    try {
+      const payment = await storage.getPaymentByOrderId(req.params.orderId);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found for order" });
+      }
+      res.json(payment);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch payment" });
+    }
+  });
+
+  app.post("/api/payments", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertPaymentSchema.parse(req.body);
+      const payment = await storage.createPayment(validatedData);
+      
+      // Update order payment status
+      await storage.updateOrder(validatedData.orderId, { paymentStatus: "Paid" });
+      
+      res.status(201).json(payment);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid payment data" });
+    }
+  });
+
+  app.put("/api/payments/:id", authenticateJWT, async (req, res) => {
+    try {
+      const payment = await storage.updatePayment(req.params.id, req.body);
+      if (!payment) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      res.json(payment);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update payment" });
+    }
+  });
+
+  app.delete("/api/payments/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deletePayment(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Payment not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete payment" });
     }
   });
 
