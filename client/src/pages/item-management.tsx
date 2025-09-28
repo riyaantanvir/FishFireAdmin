@@ -648,6 +648,57 @@ export default function ItemManagement() {
                     )}
                   />
 
+                  {/* Item Sale Type */}
+                  <FormField
+                    control={editForm.control}
+                    name="itemSaleType"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Item Sale Type</FormLabel>
+                        <Select 
+                          onValueChange={field.onChange} 
+                          value={field.value}
+                        >
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select sale type" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                            <SelectItem value="Per KG">Per KG</SelectItem>
+                            <SelectItem value="Per PCS">Per PCS</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+
+                  {/* Weight per PCS (only show when Per PCS is selected) */}
+                  {editForm.watch("itemSaleType") === "Per PCS" && (
+                    <FormField
+                      control={editForm.control}
+                      name="weightPerPCS"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Weight per PCS (KG)</FormLabel>
+                          <FormControl>
+                            <Input 
+                              type="number"
+                              step="0.001"
+                              min="0"
+                              placeholder="0.000"
+                              {...field}
+                              onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
+                              value={field.value || ""}
+                            />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
+                    />
+                  )}
+
                   {/* Selling Price per KG */}
                   <FormField
                     control={editForm.control}

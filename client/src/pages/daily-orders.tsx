@@ -36,6 +36,8 @@ const orderItemSchema = z.object({
   name: z.string(),
   quantity: z.number().min(1, "Quantity must be at least 1"),
   price: z.number().min(0, "Price must be positive"),
+  itemSaleType: z.string().optional(), // Per KG or Per PCS
+  weightPerPCS: z.number().optional(), // Weight in KG for PCS items
   discountAmount: z.number().min(0, "Discount amount must be positive").optional(),
   discountPercentage: z.number().min(0).max(100, "Discount percentage must be between 0-100").optional(),
 });
@@ -74,6 +76,8 @@ export default function DailyOrders() {
     name: "",
     quantity: 1,
     price: 0,
+    itemSaleType: "",
+    weightPerPCS: 0,
     discountAmount: 0,
     discountPercentage: 0,
   }]);
@@ -110,16 +114,25 @@ export default function DailyOrders() {
     // Calculate item-level totals and discounts
     orderItems.forEach(item => {
       if (item.quantity && item.price) {
-        const itemTotal = item.quantity * item.price;
+        // Calculate base item total based on sale type
+        let itemTotal = 0;
+        if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+          // For Per PCS: Total = (Quantity * WeightPerPCS) * PricePerKG
+          itemTotal = (item.quantity * item.weightPerPCS) * item.price;
+        } else {
+          // For Per KG: Total = Quantity * PricePerKG
+          itemTotal = item.quantity * item.price;
+        }
+        
         subtotal += itemTotal;
 
         // Calculate item discount
         let itemDiscount = 0;
-        if (item.discountPercentage > 0) {
-          itemDiscount = itemTotal * (item.discountPercentage / 100);
+        if ((item.discountPercentage || 0) > 0) {
+          itemDiscount = itemTotal * ((item.discountPercentage || 0) / 100);
         }
-        if (item.discountAmount > 0) {
-          itemDiscount += item.discountAmount;
+        if ((item.discountAmount || 0) > 0) {
+          itemDiscount += (item.discountAmount || 0);
         }
         
         itemDiscounts += itemDiscount;
@@ -160,6 +173,8 @@ export default function DailyOrders() {
       name: "",
       quantity: 1,
       price: 0,
+      itemSaleType: "",
+      weightPerPCS: 0,
       discountAmount: 0,
       discountPercentage: 0,
     }]);
@@ -178,12 +193,15 @@ export default function DailyOrders() {
     const newItems = [...orderItems];
     newItems[index] = { ...newItems[index], [field]: value };
 
-    // Auto-fill item name and price when item is selected (price is now read-only)
+    // Auto-fill item name, price, sale type, and weight when item is selected
     if (field === 'itemId' && value) {
       const selectedItem = items.find(item => item.id === value);
       if (selectedItem) {
         newItems[index].name = selectedItem.name;
-        newItems[index].price = parseFloat(selectedItem.price);
+        // Use sellingPricePerKG as the base price for calculations
+        newItems[index].price = parseFloat(selectedItem.sellingPricePerKG || selectedItem.price || "0");
+        newItems[index].itemSaleType = selectedItem.itemSaleType || "Per KG";
+        newItems[index].weightPerPCS = selectedItem.weightPerPCS ? parseFloat(selectedItem.weightPerPCS) : 0;
       }
     }
 
@@ -194,16 +212,24 @@ export default function DailyOrders() {
   const getRowTotal = (item: OrderItem) => {
     if (!item.quantity || !item.price) return 0;
     
-    let total = item.quantity * item.price;
+    // Calculate base total based on sale type
+    let total = 0;
+    if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+      // For Per PCS: Total = (Quantity * WeightPerPCS) * PricePerKG
+      total = (item.quantity * item.weightPerPCS) * item.price;
+    } else {
+      // For Per KG: Total = Quantity * PricePerKG
+      total = item.quantity * item.price;
+    }
     
     // Apply percentage discount first
-    if (item.discountPercentage > 0) {
-      total = total * (1 - item.discountPercentage / 100);
+    if ((item.discountPercentage || 0) > 0) {
+      total = total * (1 - (item.discountPercentage || 0) / 100);
     }
     
     // Then apply amount discount
-    if (item.discountAmount > 0) {
-      total = Math.max(0, total - item.discountAmount);
+    if ((item.discountAmount || 0) > 0) {
+      total = Math.max(0, total - (item.discountAmount || 0));
     }
     
     return Math.round(total * 100) / 100;
@@ -479,8 +505,10 @@ export default function DailyOrders() {
                     <TableHeader>
                       <TableRow>
                         <TableHead>Item</TableHead>
+                        <TableHead>Sale Type</TableHead>
+                        <TableHead>Weight/PCS</TableHead>
                         <TableHead>Quantity</TableHead>
-                        <TableHead>Price</TableHead>
+                        <TableHead>Price/KG</TableHead>
                         <TableHead>Discount Amount</TableHead>
                         <TableHead>Discount %</TableHead>
                         <TableHead>Row Total</TableHead>
@@ -490,6 +518,7 @@ export default function DailyOrders() {
                     <TableBody>
                       {orderItems.map((item, index) => (
                         <TableRow key={index}>
+                          {/* Item */}
                           <TableCell>
                             <Select 
                               value={item.itemId} 
@@ -501,12 +530,32 @@ export default function DailyOrders() {
                               <SelectContent>
                                 {items.filter(i => i.isActive).map((availableItem) => (
                                   <SelectItem key={availableItem.id} value={availableItem.id}>
-                                    {availableItem.name} - ${availableItem.price}
+                                    {availableItem.name} - {availableItem.itemSaleType || "Per KG"}
                                   </SelectItem>
                                 ))}
                               </SelectContent>
                             </Select>
                           </TableCell>
+                          
+                          {/* Sale Type */}
+                          <TableCell>
+                            <div className="text-sm font-medium text-muted-foreground">
+                              {item.itemSaleType || "Per KG"}
+                            </div>
+                          </TableCell>
+                          
+                          {/* Weight per PCS */}
+                          <TableCell>
+                            {item.itemSaleType === "Per PCS" && item.weightPerPCS ? (
+                              <div className="text-sm font-medium">
+                                {item.weightPerPCS} KG
+                              </div>
+                            ) : (
+                              <div className="text-sm text-muted-foreground">-</div>
+                            )}
+                          </TableCell>
+                          
+                          {/* Quantity */}
                           <TableCell>
                             <Input
                               type="number"
@@ -517,6 +566,8 @@ export default function DailyOrders() {
                               className="w-20"
                             />
                           </TableCell>
+                          
+                          {/* Price per KG */}
                           <TableCell>
                             <Input
                               type="number"
@@ -528,6 +579,8 @@ export default function DailyOrders() {
                               data-testid={`input-price-${index}`}
                             />
                           </TableCell>
+                          
+                          {/* Discount Amount */}
                           <TableCell>
                             <Input
                               type="number"
@@ -539,6 +592,8 @@ export default function DailyOrders() {
                               className="w-24"
                             />
                           </TableCell>
+                          
+                          {/* Discount Percentage */}
                           <TableCell>
                             <Input
                               type="number"
@@ -551,9 +606,13 @@ export default function DailyOrders() {
                               className="w-20"
                             />
                           </TableCell>
+                          
+                          {/* Row Total */}
                           <TableCell className="font-medium">
                             ${getRowTotal(item).toFixed(2)}
                           </TableCell>
+                          
+                          {/* Actions */}
                           <TableCell>
                             <Button
                               type="button"
