@@ -34,7 +34,7 @@ import {
 const orderItemSchema = z.object({
   itemId: z.string().min(1, "Please select an item"),
   name: z.string(),
-  quantity: z.number().min(1, "Quantity must be at least 1"),
+  liveWeight: z.number().min(0.01, "Live weight must be greater than 0"),
   price: z.number().min(0, "Price must be positive"),
   itemSaleType: z.string().optional(), // Per KG or Per PCS
   weightPerPCS: z.number().optional(), // Weight in KG for PCS items
