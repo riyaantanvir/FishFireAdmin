@@ -120,30 +120,63 @@ export default function Reports() {
   const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
   const netProfit = totalSales - totalExpenses;
 
-  // Calculate cash counter data
-  const cashCounter = paymentReports.reduce((acc, payment) => {
-    acc.cash1000 += payment.cash1000 || 0;
-    acc.cash500 += payment.cash500 || 0;
-    acc.cash200 += payment.cash200 || 0;
-    acc.cash100 += payment.cash100 || 0;
-    acc.cash50 += payment.cash50 || 0;
-    acc.cash20 += payment.cash20 || 0;
-    acc.cash10 += payment.cash10 || 0;
-    acc.cash5 += payment.cash5 || 0;
-    acc.cash2 += payment.cash2 || 0;
-    acc.cash1 += payment.cash1 || 0;
-    acc.totalCash += Number(payment.totalCash || 0);
-    acc.bkash += Number(payment.bkash || 0);
-    acc.rocket += Number(payment.rocket || 0);
-    acc.nogod += Number(payment.nogod || 0);
-    acc.card += Number(payment.card || 0);
-    acc.bank += Number(payment.bank || 0);
-    acc.totalDigital += Number(payment.totalDigital || 0);
-    return acc;
-  }, {
-    cash1000: 0, cash500: 0, cash200: 0, cash100: 0, cash50: 0,
-    cash20: 0, cash10: 0, cash5: 0, cash2: 0, cash1: 0,
-    totalCash: 0, bkash: 0, rocket: 0, nogod: 0, card: 0, bank: 0, totalDigital: 0
+  // Calculate stock report data
+  const stockReportData = items.map(item => {
+    const openingQty = openingStock
+      .filter(stock => stock.itemId === item.id)
+      .reduce((sum, stock) => sum + parseFloat(stock.quantity), 0);
+    
+    const closingQty = closingStock
+      .filter(stock => stock.itemId === item.id)
+      .reduce((sum, stock) => sum + parseFloat(stock.quantity), 0);
+
+    // Calculate sold quantity from filtered orders
+    const soldQty = filteredOrders.reduce((total, order) => {
+      try {
+        const items = JSON.parse(order.items);
+        const orderItems = Array.isArray(items) ? items : items.items || [];
+        const itemSales = orderItems
+          .filter((orderItem: any) => orderItem.itemId === item.id || orderItem.name === item.name)
+          .reduce((sum: number, orderItem: any) => sum + (orderItem.liveWeight || 0), 0);
+        return total + itemSales;
+      } catch {
+        return total;
+      }
+    }, 0);
+
+    return {
+      item: item.name,
+      openingStock: openingQty,
+      sold: soldQty,
+      closingStock: closingQty,
+      availableStock: closingQty
+    };
+  });
+
+  // Prepare payment & sales report data
+  const paymentSalesData = filteredOrders.map(order => {
+    const payment = paymentReports.find(p => p.orderId === order.id);
+    const paymentMethod = payment ? 
+      (payment.totalCash > 0 ? 'Cash' : '') + 
+      (payment.bkash > 0 ? 'bKash ' : '') +
+      (payment.rocket > 0 ? 'Rocket ' : '') +
+      (payment.nogod > 0 ? 'Nogod ' : '') +
+      (payment.card > 0 ? 'Card ' : '') +
+      (payment.bank > 0 ? 'Bank ' : '') || 'N/A'
+      : 'N/A';
+    
+    const paidAmount = payment ? 
+      Number(payment.totalCash || 0) + Number(payment.totalDigital || 0) : 0;
+
+    return {
+      date: order.orderDate || (order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : ''),
+      orderNo: order.orderNumber,
+      customer: order.customerName,
+      totalBill: Number(order.totalAmount),
+      paymentMethod,
+      paidAmount,
+      status: order.paymentStatus || 'Unpaid'
+    };
   });
 
   // Export to CSV function
@@ -164,7 +197,7 @@ export default function Reports() {
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `${filename}_${dateFrom}_to_${dateTo}.csv`;
+    a.download = `${filename}_${currentDateRange.from}_to_${currentDateRange.to}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
   };
@@ -181,7 +214,7 @@ export default function Reports() {
     
     // Add date range
     doc.setFontSize(12);
-    doc.text(`Date Range: ${dateFrom} to ${dateTo}`, 20, 35);
+    doc.text(`Date Range: ${currentDateRange.from} to ${currentDateRange.to}`, 20, 35);
     
     // Add table
     autoTable(doc, {
@@ -193,10 +226,10 @@ export default function Reports() {
     });
     
     // Save the PDF
-    doc.save(`${filename}_${dateFrom}_to_${dateTo}.pdf`);
+    doc.save(`${filename}_${currentDateRange.from}_to_${currentDateRange.to}.pdf`);
   };
 
-  const isLoading = ordersLoading || paymentsLoading;
+  const isLoading = ordersLoading || paymentsLoading || expensesLoading;
 
   return (
     <div className="space-y-6">
@@ -209,487 +242,352 @@ export default function Reports() {
         </div>
       </div>
 
-      {/* Date Range Filter */}
+      {/* Filter Section */}
       <Card>
         <CardContent className="p-4">
-          <div className="flex gap-4 items-center">
+          <div className="flex gap-4 items-center flex-wrap">
             <div>
-              <Label htmlFor="date-from">From Date</Label>
-              <Input
-                id="date-from"
-                type="date"
-                value={dateFrom}
-                onChange={(e) => setDateFrom(e.target.value)}
-                data-testid="input-date-from"
-              />
-            </div>
-            <div>
-              <Label htmlFor="date-to">To Date</Label>
-              <Input
-                id="date-to"
-                type="date"
-                value={dateTo}
-                onChange={(e) => setDateTo(e.target.value)}
-                data-testid="input-date-to"
-              />
-            </div>
-            <div className="flex items-end">
-              <Button 
-                variant="outline" 
-                onClick={() => {
-                  setDateFrom(new Date().toISOString().split('T')[0]);
-                  setDateTo(new Date().toISOString().split('T')[0]);
-                }}
-                data-testid="button-today"
+              <Label htmlFor="filter-type">Filter</Label>
+              <Select 
+                value={filterType} 
+                onValueChange={setFilterType}
+                data-testid="select-filter-type"
               >
-                Today
-              </Button>
+                <SelectTrigger className="w-40">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="this-month">This Month</SelectItem>
+                  <SelectItem value="last-month">Last Month</SelectItem>
+                  <SelectItem value="custom">Custom Date Range</SelectItem>
+                  <SelectItem value="all">All Data</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            
+            {filterType === "custom" && (
+              <>
+                <div>
+                  <Label htmlFor="date-from">From Date</Label>
+                  <Input
+                    id="date-from"
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e) => setDateFrom(e.target.value)}
+                    data-testid="input-date-from"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="date-to">To Date</Label>
+                  <Input
+                    id="date-to"
+                    type="date"
+                    value={dateTo}
+                    onChange={(e) => setDateTo(e.target.value)}
+                    data-testid="input-date-to"
+                  />
+                </div>
+              </>
+            )}
+            
+            <div className="text-sm text-muted-foreground">
+              Showing data from {currentDateRange.from} to {currentDateRange.to}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Reports Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="payment-summary" data-testid="tab-payment-summary">
-            <DollarSign className="h-4 w-4 mr-2" />
-            Payment Summary
-          </TabsTrigger>
-          <TabsTrigger value="cash-counter" data-testid="tab-cash-counter">
-            <Calculator className="h-4 w-4 mr-2" />
-            Cash Counter
-          </TabsTrigger>
-          <TabsTrigger value="sales" data-testid="tab-sales">
-            <TrendingUp className="h-4 w-4 mr-2" />
-            Sales Report
-          </TabsTrigger>
-          <TabsTrigger value="outstanding" data-testid="tab-outstanding">
-            <AlertCircle className="h-4 w-4 mr-2" />
-            Outstanding
-          </TabsTrigger>
-        </TabsList>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+            <Receipt className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold" data-testid="card-total-orders">
+              {totalOrders}
+            </div>
+          </CardContent>
+        </Card>
 
-        {/* Payment Summary Tab */}
-        <TabsContent value="payment-summary" className="space-y-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Sales</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600" data-testid="card-total-sales">
+              TK {totalSales.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-red-600" data-testid="card-total-expenses">
+              TK {totalExpenses.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className={`text-2xl font-bold ${netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`} data-testid="card-net-profit">
+              TK {netProfit.toLocaleString()}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Payment & Sales Report */}
+      <Card>
+        <CardHeader>
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Payment Summary Report</h2>
+            <div>
+              <CardTitle>Payment & Sales Report</CardTitle>
+              <CardDescription>
+                Detailed view of orders with payment information
+              </CardDescription>
+            </div>
             <div className="flex gap-2">
               <Button
-                onClick={() => exportToCSV([paymentSummary], 'payment_summary')}
+                onClick={() => exportToCSV(paymentSalesData, 'payment_sales_report')}
                 variant="outline"
-                data-testid="button-export-payment-summary-csv"
+                data-testid="button-export-payment-sales-csv"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
               <Button
                 onClick={() => exportToPDF(
-                  [paymentSummary], 
-                  'payment_summary', 
-                  'Payment Summary Report',
-                  ['Metric', 'Value'],
-                  ['totalOrders', 'totalRevenue', 'paidAmount', 'outstandingAmount']
+                  paymentSalesData, 
+                  'payment_sales_report', 
+                  'Payment & Sales Report',
+                  ['Date', 'Order No', 'Customer', 'Total Bill', 'Payment Method', 'Paid Amount', 'Status'],
+                  ['date', 'orderNo', 'customer', 'totalBill', 'paymentMethod', 'paidAmount', 'status']
                 )}
                 variant="outline"
-                data-testid="button-export-payment-summary-pdf"
+                data-testid="button-export-payment-sales-pdf"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 Export PDF
               </Button>
             </div>
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
-                <TrendingUp className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-orders">
-                  {paymentSummary.totalOrders}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                <DollarSign className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold" data-testid="text-total-revenue">
-                  TK {paymentSummary.totalRevenue.toLocaleString()}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Paid Amount</CardTitle>
-                <DollarSign className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600" data-testid="text-paid-amount">
-                  TK {paymentSummary.paidAmount.toLocaleString()}
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Outstanding</CardTitle>
-                <AlertCircle className="h-4 w-4 text-red-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600" data-testid="text-outstanding-amount">
-                  TK {paymentSummary.outstandingAmount.toLocaleString()}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Status Breakdown</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="flex items-center space-x-2">
-                  <Badge variant="default">Paid</Badge>
-                  <span className="text-lg font-medium">{paymentSummary.paidOrders} orders</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant="secondary">Partial</Badge>
-                  <span className="text-lg font-medium">{paymentSummary.partialOrders} orders</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <Badge variant="destructive">Unpaid</Badge>
-                  <span className="text-lg font-medium">{paymentSummary.unpaidOrders} orders</span>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Cash Counter Tab */}
-        <TabsContent value="cash-counter" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Cash Counter Report</h2>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => exportToCSV([cashCounter], 'cash_counter')}
-                variant="outline"
-                data-testid="button-export-cash-counter-csv"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              <Button
-                onClick={() => exportToPDF(
-                  [cashCounter], 
-                  'cash_counter', 
-                  'Cash Counter Report',
-                  ['Item', 'Count/Amount'],
-                  ['cash1000', 'cash500', 'cash200', 'cash100', 'totalCash', 'totalDigital']
-                )}
-                variant="outline"
-                data-testid="button-export-cash-counter-pdf"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Cash Breakdown */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Cash Notes Breakdown</CardTitle>
-                <CardDescription>Note-wise cash collection summary</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Note</TableHead>
-                      <TableHead>Count</TableHead>
-                      <TableHead>Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {[
-                      { note: "TK 1000", count: cashCounter.cash1000, amount: cashCounter.cash1000 * 1000 },
-                      { note: "TK 500", count: cashCounter.cash500, amount: cashCounter.cash500 * 500 },
-                      { note: "TK 200", count: cashCounter.cash200, amount: cashCounter.cash200 * 200 },
-                      { note: "TK 100", count: cashCounter.cash100, amount: cashCounter.cash100 * 100 },
-                      { note: "TK 50", count: cashCounter.cash50, amount: cashCounter.cash50 * 50 },
-                      { note: "TK 20", count: cashCounter.cash20, amount: cashCounter.cash20 * 20 },
-                      { note: "TK 10", count: cashCounter.cash10, amount: cashCounter.cash10 * 10 },
-                      { note: "TK 5", count: cashCounter.cash5, amount: cashCounter.cash5 * 5 },
-                      { note: "TK 2", count: cashCounter.cash2, amount: cashCounter.cash2 * 2 },
-                      { note: "TK 1", count: cashCounter.cash1, amount: cashCounter.cash1 * 1 },
-                    ].map((item) => (
-                      <TableRow key={item.note}>
-                        <TableCell className="font-medium">{item.note}</TableCell>
-                        <TableCell>{item.count}</TableCell>
-                        <TableCell>TK {item.amount.toLocaleString()}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                  <div className="text-lg font-bold">
-                    Total Cash: TK {cashCounter.totalCash.toLocaleString()}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Digital Payments */}
-            <Card>
-              <CardHeader>
-                <CardTitle>Digital Payments</CardTitle>
-                <CardDescription>Digital payment methods summary</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Method</TableHead>
-                      <TableHead>Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    <TableRow>
-                      <TableCell className="font-medium">bKash</TableCell>
-                      <TableCell>TK {cashCounter.bkash.toLocaleString()}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Rocket</TableCell>
-                      <TableCell>TK {cashCounter.rocket.toLocaleString()}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Nogod</TableCell>
-                      <TableCell>TK {cashCounter.nogod.toLocaleString()}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Card</TableCell>
-                      <TableCell>TK {cashCounter.card.toLocaleString()}</TableCell>
-                    </TableRow>
-                    <TableRow>
-                      <TableCell className="font-medium">Bank Transfer</TableCell>
-                      <TableCell>TK {cashCounter.bank.toLocaleString()}</TableCell>
-                    </TableRow>
-                  </TableBody>
-                </Table>
-                <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-                  <div className="text-lg font-bold">
-                    Total Digital: TK {cashCounter.totalDigital.toLocaleString()}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Payment Method Summary</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div>
-                  <Label>Total Cash</Label>
-                  <div className="text-2xl font-bold">TK {cashCounter.totalCash.toLocaleString()}</div>
-                </div>
-                <div>
-                  <Label>Total Digital</Label>
-                  <div className="text-2xl font-bold">TK {cashCounter.totalDigital.toLocaleString()}</div>
-                </div>
-                <div>
-                  <Label>Grand Total</Label>
-                  <div className="text-2xl font-bold text-green-600">
-                    TK {(cashCounter.totalCash + cashCounter.totalDigital).toLocaleString()}
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* Sales Report Tab */}
-        <TabsContent value="sales" className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Sales Report</h2>
-            <div className="flex gap-2">
-              <Button
-                onClick={() => exportToCSV(filteredOrders, 'sales_report')}
-                variant="outline"
-                data-testid="button-export-sales-csv"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                Export CSV
-              </Button>
-              <Button
-                onClick={() => exportToPDF(
-                  filteredOrders, 
-                  'sales_report', 
-                  'Sales Report',
-                  ['Order Number', 'Customer', 'Date', 'Amount', 'Payment Status'],
-                  ['orderNumber', 'customerName', 'orderDate', 'totalAmount', 'paymentStatus']
-                )}
-                variant="outline"
-                data-testid="button-export-sales-pdf"
-              >
-                <FileText className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
-            </div>
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Sales Overview</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order Number</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Payment Status</TableHead>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-center py-8">Loading...</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Order No</TableHead>
+                  <TableHead>Customer</TableHead>
+                  <TableHead>Total Bill</TableHead>
+                  <TableHead>Payment Method</TableHead>
+                  <TableHead>Paid Amount</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {paymentSalesData.map((row, index) => (
+                  <TableRow key={index} data-testid={`payment-sales-row-${index}`}>
+                    <TableCell>{new Date(row.date).toLocaleDateString()}</TableCell>
+                    <TableCell className="font-medium">{row.orderNo}</TableCell>
+                    <TableCell>{row.customer}</TableCell>
+                    <TableCell>TK {row.totalBill.toLocaleString()}</TableCell>
+                    <TableCell>{row.paymentMethod}</TableCell>
+                    <TableCell>TK {row.paidAmount.toLocaleString()}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant={
+                          row.status === 'Paid' ? 'default' :
+                          row.status === 'Partial' ? 'secondary' : 'destructive'
+                        }
+                      >
+                        {row.status}
+                      </Badge>
+                    </TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredOrders.map((order) => (
-                    <TableRow key={order.id} data-testid={`sales-row-${order.id}`}>
-                      <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                      <TableCell>{order.customerName}</TableCell>
-                      <TableCell>
-                        {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
-                         order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
-                      </TableCell>
-                      <TableCell>TK {Number(order.totalAmount).toLocaleString()}</TableCell>
-                      <TableCell>
-                        <Badge 
-                          variant={
-                            order.paymentStatus === 'Paid' ? 'default' :
-                            order.paymentStatus === 'Partial' ? 'secondary' : 'destructive'
-                          }
-                        >
-                          {order.paymentStatus || 'Unpaid'}
-                        </Badge>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              {filteredOrders.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  No sales data available for the selected date range.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {paymentSalesData.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No payment & sales data available for the selected period.
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Outstanding Report Tab */}
-        <TabsContent value="outstanding" className="space-y-4">
+      {/* Stock Report */}
+      <Card>
+        <CardHeader>
           <div className="flex justify-between items-center">
-            <h2 className="text-xl font-semibold">Outstanding Report</h2>
+            <div>
+              <CardTitle>Stock Report</CardTitle>
+              <CardDescription>
+                Inventory overview with opening, sold, and closing stock
+              </CardDescription>
+            </div>
             <div className="flex gap-2">
               <Button
-                onClick={() => exportToCSV(
-                  filteredOrders.filter(order => order.paymentStatus !== 'Paid'),
-                  'outstanding_report'
-                )}
+                onClick={() => exportToCSV(stockReportData, 'stock_report')}
                 variant="outline"
-                data-testid="button-export-outstanding-csv"
+                data-testid="button-export-stock-csv"
               >
                 <Download className="h-4 w-4 mr-2" />
                 Export CSV
               </Button>
               <Button
-                onClick={() => {
-                  const outstandingOrders = filteredOrders.filter(order => order.paymentStatus !== 'Paid');
-                  exportToPDF(
-                    outstandingOrders, 
-                    'outstanding_report', 
-                    'Outstanding Payments Report',
-                    ['Order Number', 'Customer', 'Date', 'Amount', 'Status', 'Days Overdue'],
-                    ['orderNumber', 'customerName', 'orderDate', 'totalAmount', 'paymentStatus', 'daysOverdue']
-                  );
-                }}
+                onClick={() => exportToPDF(
+                  stockReportData, 
+                  'stock_report', 
+                  'Stock Report',
+                  ['Item', 'Opening Stock', 'Sold', 'Closing Stock', 'Available Stock'],
+                  ['item', 'openingStock', 'sold', 'closingStock', 'availableStock']
+                )}
                 variant="outline"
-                data-testid="button-export-outstanding-pdf"
+                data-testid="button-export-stock-pdf"
               >
                 <FileText className="h-4 w-4 mr-2" />
                 Export PDF
               </Button>
             </div>
           </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Unpaid & Partial Orders</CardTitle>
-              <CardDescription>Orders with pending payments</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Order Number</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Amount</TableHead>
-                    <TableHead>Status</TableHead>
-                    <TableHead>Days Overdue</TableHead>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-center py-8">Loading...</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Opening Stock</TableHead>
+                  <TableHead>Sold</TableHead>
+                  <TableHead>Closing Stock</TableHead>
+                  <TableHead>Available Stock</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {stockReportData.map((row, index) => (
+                  <TableRow key={index} data-testid={`stock-row-${index}`}>
+                    <TableCell className="font-medium">{row.item}</TableCell>
+                    <TableCell>{row.openingStock.toFixed(2)}</TableCell>
+                    <TableCell>{row.sold.toFixed(2)}</TableCell>
+                    <TableCell>{row.closingStock.toFixed(2)}</TableCell>
+                    <TableCell>{row.availableStock.toFixed(2)}</TableCell>
                   </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredOrders
-                    .filter(order => order.paymentStatus !== 'Paid')
-                    .map((order) => {
-                      const orderDate = new Date(order.orderDate || order.createdAt || '');
-                      const today = new Date();
-                      const daysOverdue = Math.floor((today.getTime() - orderDate.getTime()) / (1000 * 60 * 60 * 24));
-                      
-                      return (
-                        <TableRow key={order.id} data-testid={`outstanding-row-${order.id}`}>
-                          <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                          <TableCell>{order.customerName}</TableCell>
-                          <TableCell>{orderDate.toLocaleDateString()}</TableCell>
-                          <TableCell>TK {Number(order.totalAmount).toLocaleString()}</TableCell>
-                          <TableCell>
-                            <Badge variant={order.paymentStatus === 'Partial' ? 'secondary' : 'destructive'}>
-                              {order.paymentStatus || 'Unpaid'}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <span className={daysOverdue > 7 ? 'text-red-600 font-medium' : ''}>
-                              {daysOverdue} days
-                            </span>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-              {filteredOrders.filter(order => order.paymentStatus !== 'Paid').length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
-                  <div className="text-green-600 font-medium">
-                    🎉 No outstanding payments! All orders are paid.
-                  </div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {stockReportData.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No stock data available for the selected period.
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Expense Report */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle>Expense Report</CardTitle>
+              <CardDescription>
+                Detailed breakdown of all expenses
+              </CardDescription>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                onClick={() => exportToCSV(filteredExpenses.map(expense => ({
+                  date: expense.date || (expense.createdAt ? new Date(expense.createdAt).toISOString().split('T')[0] : ''),
+                  expenseType: expense.category,
+                  amount: Number(expense.amount),
+                  notes: expense.comment || ''
+                })), 'expense_report')}
+                variant="outline"
+                data-testid="button-export-expense-csv"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                Export CSV
+              </Button>
+              <Button
+                onClick={() => exportToPDF(
+                  filteredExpenses.map(expense => ({
+                    date: expense.date || (expense.createdAt ? new Date(expense.createdAt).toISOString().split('T')[0] : ''),
+                    expenseType: expense.category,
+                    amount: Number(expense.amount),
+                    notes: expense.comment || ''
+                  })), 
+                  'expense_report', 
+                  'Expense Report',
+                  ['Date', 'Expense Type', 'Amount', 'Notes'],
+                  ['date', 'expenseType', 'amount', 'notes']
+                )}
+                variant="outline"
+                data-testid="button-export-expense-pdf"
+              >
+                <FileText className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {isLoading ? (
+            <div className="text-center py-8">Loading...</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>Expense Type</TableHead>
+                  <TableHead>Amount</TableHead>
+                  <TableHead>Notes</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredExpenses.map((expense) => (
+                  <TableRow key={expense.id} data-testid={`expense-row-${expense.id}`}>
+                    <TableCell>
+                      {expense.date ? 
+                        new Date(expense.date).toLocaleDateString() : 
+                        expense.createdAt ? new Date(expense.createdAt).toLocaleDateString() : 'N/A'
+                      }
+                    </TableCell>
+                    <TableCell className="font-medium">{expense.category}</TableCell>
+                    <TableCell>TK {Number(expense.amount).toLocaleString()}</TableCell>
+                    <TableCell>{expense.comment || '-'}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+          {filteredExpenses.length === 0 && !isLoading && (
+            <div className="text-center py-8 text-muted-foreground">
+              No expense data available for the selected period.
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
