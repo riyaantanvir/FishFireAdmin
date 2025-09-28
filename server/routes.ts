@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth } from "./auth";
+import { setupAuth, authenticateJWT } from "./auth";
 import { storage } from "./storage";
 import { insertOrderSchema, insertItemSchema } from "@shared/schema";
 
@@ -9,9 +9,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   setupAuth(app);
 
   // Orders API
-  app.get("/api/orders", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.get("/api/orders", authenticateJWT, async (req, res) => {
     try {
       const orders = await storage.getOrders();
       res.json(orders);
@@ -20,21 +18,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/orders", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.post("/api/orders", authenticateJWT, async (req, res) => {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
       const order = await storage.createOrder(validatedData);
       res.status(201).json(order);
     } catch (error) {
+      console.error('Create order error:', error);
       res.status(400).json({ message: "Invalid order data" });
     }
   });
 
-  app.put("/api/orders/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.put("/api/orders/:id", authenticateJWT, async (req, res) => {
     try {
       const order = await storage.updateOrder(req.params.id, req.body);
       if (!order) {
@@ -46,9 +41,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/orders/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.delete("/api/orders/:id", authenticateJWT, async (req, res) => {
     try {
       const deleted = await storage.deleteOrder(req.params.id);
       if (!deleted) {
@@ -61,9 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Items API
-  app.get("/api/items", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.get("/api/items", authenticateJWT, async (req, res) => {
     try {
       const items = await storage.getItems();
       res.json(items);
@@ -72,9 +63,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/items", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.post("/api/items", authenticateJWT, async (req, res) => {
     try {
       const validatedData = insertItemSchema.parse(req.body);
       const item = await storage.createItem(validatedData);
@@ -84,9 +73,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/items/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.put("/api/items/:id", authenticateJWT, async (req, res) => {
     try {
       const item = await storage.updateItem(req.params.id, req.body);
       if (!item) {
@@ -98,9 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/items/:id", async (req, res) => {
-    if (!req.isAuthenticated()) return res.sendStatus(401);
-    
+  app.delete("/api/items/:id", authenticateJWT, async (req, res) => {
     try {
       const deleted = await storage.deleteItem(req.params.id);
       if (!deleted) {

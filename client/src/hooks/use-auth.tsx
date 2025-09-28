@@ -12,9 +12,9 @@ type AuthContextType = {
   user: SelectUser | null;
   isLoading: boolean;
   error: Error | null;
-  loginMutation: UseMutationResult<SelectUser, Error, LoginData>;
+  loginMutation: UseMutationResult<{ user: SelectUser; token: string }, Error, LoginData>;
   logoutMutation: UseMutationResult<void, Error, void>;
-  registerMutation: UseMutationResult<SelectUser, Error, InsertUser>;
+  registerMutation: UseMutationResult<{ user: SelectUser; token?: string }, Error, InsertUser>;
 };
 
 type LoginData = Pick<InsertUser, "username" | "password">;
@@ -36,8 +36,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (response: { user: SelectUser; token: string }) => {
+      // Store JWT token in localStorage
+      localStorage.setItem('auth_token', response.token);
+      queryClient.setQueryData(["/api/user"], response.user);
     },
     onError: (error: Error) => {
       toast({
@@ -53,8 +55,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/register", credentials);
       return await res.json();
     },
-    onSuccess: (user: SelectUser) => {
-      queryClient.setQueryData(["/api/user"], user);
+    onSuccess: (response: { user: SelectUser; token?: string }) => {
+      // Store JWT token if provided
+      if (response.token) {
+        localStorage.setItem('auth_token', response.token);
+      }
+      queryClient.setQueryData(["/api/user"], response.user || response);
     },
     onError: (error: Error) => {
       toast({
@@ -70,9 +76,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await apiRequest("POST", "/api/logout");
     },
     onSuccess: () => {
+      // Remove JWT token from localStorage
+      localStorage.removeItem('auth_token');
       queryClient.setQueryData(["/api/user"], null);
     },
     onError: (error: Error) => {
+      // Remove token even if logout fails
+      localStorage.removeItem('auth_token');
+      queryClient.setQueryData(["/api/user"], null);
       toast({
         title: "Logout failed",
         description: error.message,
