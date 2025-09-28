@@ -76,6 +76,17 @@ export default function ItemManagement() {
     },
   });
 
+  const editForm = useForm<ItemForm>({
+    resolver: zodResolver(itemFormSchema),
+    defaultValues: {
+      date: new Date().toISOString().split('T')[0],
+      name: "",
+      itemType: undefined,
+      sellingPricePerKG: undefined,
+      sellingPricePerPCS: undefined,
+    },
+  });
+
   const createItemMutation = useMutation({
     mutationFn: async (data: ItemForm) => {
       const itemData = {
@@ -185,11 +196,26 @@ export default function ItemManagement() {
 
   const handleEdit = (item: Item) => {
     setEditingItem(item);
+    // Reset the edit form with the selected item's data
+    editForm.reset({
+      date: item.date || new Date().toISOString().split('T')[0],
+      name: item.name,
+      itemType: item.itemType || item.category,
+      sellingPricePerKG: item.sellingPricePerKG ? parseFloat(item.sellingPricePerKG) : undefined,
+      sellingPricePerPCS: item.sellingPricePerPCS ? parseFloat(item.sellingPricePerPCS) : undefined,
+    });
   };
 
   const onEditSubmit = (values: ItemForm) => {
     if (editingItem) {
       updateItemMutation.mutate({ itemId: editingItem.id, data: values });
+    }
+  };
+
+  const handleCloseEditModal = (open: boolean) => {
+    if (!open) {
+      setEditingItem(null);
+      editForm.reset();
     }
   };
 
@@ -468,7 +494,7 @@ export default function ItemManagement() {
       </Card>
 
       {/* Edit Item Modal */}
-      <Dialog open={!!editingItem} onOpenChange={() => setEditingItem(null)}>
+      <Dialog open={!!editingItem} onOpenChange={handleCloseEditModal}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Edit Item</DialogTitle>
@@ -477,16 +503,16 @@ export default function ItemManagement() {
             </DialogDescription>
           </DialogHeader>
           {editingItem && (
-            <Form {...form}>
+            <Form {...editForm}>
               <form 
-                onSubmit={form.handleSubmit(onEditSubmit)} 
+                onSubmit={editForm.handleSubmit(onEditSubmit)} 
                 className="space-y-4"
                 key={editingItem.id} // Force re-render when editing different item
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Date */}
                   <FormField
-                    control={form.control}
+                    control={editForm.control}
                     name="date"
                     render={({ field }) => (
                       <FormItem>
@@ -495,7 +521,6 @@ export default function ItemManagement() {
                           <Input 
                             type="date"
                             {...field}
-                            defaultValue={editingItem.date || new Date().toISOString().split('T')[0]}
                           />
                         </FormControl>
                         <FormMessage />
@@ -505,7 +530,7 @@ export default function ItemManagement() {
 
                   {/* Item Name */}
                   <FormField
-                    control={form.control}
+                    control={editForm.control}
                     name="name"
                     render={({ field }) => (
                       <FormItem>
@@ -514,7 +539,6 @@ export default function ItemManagement() {
                           <Input 
                             placeholder="Enter item name"
                             {...field}
-                            defaultValue={editingItem.name}
                           />
                         </FormControl>
                         <FormMessage />
@@ -524,14 +548,14 @@ export default function ItemManagement() {
 
                   {/* Item Type */}
                   <FormField
-                    control={form.control}
+                    control={editForm.control}
                     name="itemType"
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Item Type</FormLabel>
                         <Select 
                           onValueChange={field.onChange} 
-                          defaultValue={editingItem.itemType || editingItem.category}
+                          value={field.value}
                         >
                           <FormControl>
                             <SelectTrigger>
@@ -552,7 +576,7 @@ export default function ItemManagement() {
 
                   {/* Selling Price per KG */}
                   <FormField
-                    control={form.control}
+                    control={editForm.control}
                     name="sellingPricePerKG"
                     render={({ field }) => (
                       <FormItem>
@@ -565,7 +589,7 @@ export default function ItemManagement() {
                             placeholder="0.00"
                             {...field}
                             onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                            defaultValue={editingItem.sellingPricePerKG ? parseFloat(editingItem.sellingPricePerKG) : ""}
+                            value={field.value || ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -575,7 +599,7 @@ export default function ItemManagement() {
 
                   {/* Selling Price per PCS */}
                   <FormField
-                    control={form.control}
+                    control={editForm.control}
                     name="sellingPricePerPCS"
                     render={({ field }) => (
                       <FormItem>
@@ -588,7 +612,7 @@ export default function ItemManagement() {
                             placeholder="0.00"
                             {...field}
                             onChange={(e) => field.onChange(e.target.value ? Number(e.target.value) : undefined)}
-                            defaultValue={editingItem.sellingPricePerPCS ? parseFloat(editingItem.sellingPricePerPCS) : ""}
+                            value={field.value || ""}
                           />
                         </FormControl>
                         <FormMessage />
@@ -601,7 +625,7 @@ export default function ItemManagement() {
                   <Button 
                     type="button" 
                     variant="outline" 
-                    onClick={() => setEditingItem(null)}
+                    onClick={() => handleCloseEditModal(false)}
                   >
                     Cancel
                   </Button>
