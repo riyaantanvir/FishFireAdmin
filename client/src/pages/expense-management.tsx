@@ -373,7 +373,7 @@ export default function ExpenseManagement() {
 
         const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, "").trim());
         
-        const requiredHeaders = ["Date", "Person/Item", "Category", "Qty", "Amount"];
+        const requiredHeaders = ["Date", "Person/Item", "Category", "Amount"];
         const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
         
         if (missingHeaders.length > 0) {
@@ -392,19 +392,24 @@ export default function ExpenseManagement() {
               row[header] = values[i] || "";
             });
 
-            // Validate required fields
+            // Validate only essential required fields (allow blanks for others)
             if (!row.Date || !row["Person/Item"] || !row.Category || !row.Amount) {
-              errors.push(`Row ${index + 2}: Missing required data`);
+              errors.push(`Row ${index + 2}: Missing essential data (Date, Person/Item, Category, Amount are required)`);
             }
 
-            // Validate date format
-            if (row.Date && isNaN(Date.parse(row.Date))) {
+            // Validate date format only if not blank
+            if (row.Date && row.Date.trim() && isNaN(Date.parse(row.Date))) {
               errors.push(`Row ${index + 2}: Invalid date format`);
             }
 
-            // Validate amount is numeric
-            if (row.Amount && isNaN(parseFloat(row.Amount))) {
+            // Validate amount is numeric only if not blank
+            if (row.Amount && row.Amount.trim() && isNaN(parseFloat(row.Amount))) {
               errors.push(`Row ${index + 2}: Amount must be a number`);
+            }
+
+            // Set default values for optional fields if blank
+            if (!row.Qty || !row.Qty.trim()) {
+              row.Qty = "1";
             }
 
             return row;
