@@ -54,6 +54,26 @@ export const expenses = pgTable("expenses", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
+export const openingStock = pgTable("opening_stock", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(), // Date of stock entry
+  itemId: varchar("item_id").notNull(), // Reference to item
+  itemName: text("item_name").notNull(), // Item name for easier querying
+  quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(), // Opening stock quantity
+  unit: text("unit").notNull(), // PCS or KG
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const closingStock = pgTable("closing_stock", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  date: text("date").notNull(), // Date of stock entry
+  itemId: varchar("item_id").notNull(), // Reference to item
+  itemName: text("item_name").notNull(), // Item name for easier querying
+  quantity: decimal("quantity", { precision: 10, scale: 3 }).notNull(), // Closing stock quantity
+  unit: text("unit").notNull(), // PCS or KG
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
@@ -77,6 +97,16 @@ export const insertExpenseSchema = createInsertSchema(expenses).omit({
   createdAt: true,
 });
 
+export const insertOpeningStockSchema = createInsertSchema(openingStock).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertClosingStockSchema = createInsertSchema(closingStock).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
@@ -85,3 +115,7 @@ export type InsertItem = z.infer<typeof insertItemSchema>;
 export type Item = typeof items.$inferSelect;
 export type InsertExpense = z.infer<typeof insertExpenseSchema>;
 export type Expense = typeof expenses.$inferSelect;
+export type InsertOpeningStock = z.infer<typeof insertOpeningStockSchema>;
+export type OpeningStock = typeof openingStock.$inferSelect;
+export type InsertClosingStock = z.infer<typeof insertClosingStockSchema>;
+export type ClosingStock = typeof closingStock.$inferSelect;

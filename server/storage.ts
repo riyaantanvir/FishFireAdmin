@@ -157,6 +157,8 @@ export class MemStorage implements IStorage {
       stock: insertItem.stock || 0,
       isActive: insertItem.isActive || "true",
       weightPerPCS: insertItem.weightPerPCS || null,
+      sellingPricePerKG: insertItem.sellingPricePerKG || null,
+      sellingPricePerPCS: insertItem.sellingPricePerPCS || null,
       createdAt: new Date(),
     };
     this.items.set(id, item);
@@ -192,6 +194,7 @@ export class MemStorage implements IStorage {
       ...insertExpense,
       id,
       weight: insertExpense.weight || null,
+      qty: insertExpense.qty || 1,
       dueAmount: insertExpense.dueAmount || null,
       comment: insertExpense.comment || null,
       createdAt: new Date(),
