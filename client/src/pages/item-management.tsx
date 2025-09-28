@@ -867,7 +867,7 @@ export default function ItemManagement() {
                     </TableCell>
                     <TableCell>
                       {item.sellingPricePerKG ? (
-                        <span className="font-medium">${item.sellingPricePerKG}</span>
+                        <span className="font-medium">TK {item.sellingPricePerKG}</span>
                       ) : (
                         <X className="h-4 w-4 text-muted-foreground" />
                       )}

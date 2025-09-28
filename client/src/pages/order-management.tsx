@@ -96,10 +96,7 @@ export default function OrderManagement() {
   // Helper function to format currency
   const formatCurrency = (amount: string | number) => {
     const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
-    }).format(num);
+    return `TK ${num.toLocaleString()}`;
   };
 
   // Helper function to format date

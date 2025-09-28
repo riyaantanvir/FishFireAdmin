@@ -793,7 +793,7 @@ export default function DailyOrders() {
                           
                           {/* Row Total */}
                           <TableCell className="font-medium">
-                            ${getRowTotal(item).toFixed(2)}
+                            TK {getRowTotal(item).toFixed(2)}
                           </TableCell>
                           
                           {/* Actions */}
@@ -852,23 +852,23 @@ export default function DailyOrders() {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
                   <Label>Subtotal</Label>
-                  <div className="text-lg font-medium">${orderSummary.subtotal.toFixed(2)}</div>
+                  <div className="text-lg font-medium">TK {orderSummary.subtotal.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>Item Discounts</Label>
-                  <div className="text-lg font-medium text-red-600">-${orderSummary.itemDiscounts.toFixed(2)}</div>
+                  <div className="text-lg font-medium text-red-600">-TK {orderSummary.itemDiscounts.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>After Item Discounts</Label>
-                  <div className="text-lg font-medium">${orderSummary.subtotalAfterItemDiscounts.toFixed(2)}</div>
+                  <div className="text-lg font-medium">TK {orderSummary.subtotalAfterItemDiscounts.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>Order Discounts</Label>
-                  <div className="text-lg font-medium text-red-600">-${orderSummary.orderDiscounts.toFixed(2)}</div>
+                  <div className="text-lg font-medium text-red-600">-TK {orderSummary.orderDiscounts.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>Final Order Total</Label>
-                  <div className="text-xl font-bold">${orderSummary.finalTotal.toFixed(2)}</div>
+                  <div className="text-xl font-bold">TK {orderSummary.finalTotal.toFixed(2)}</div>
                 </div>
               </div>
 
@@ -953,7 +953,7 @@ export default function DailyOrders() {
                       {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
                        order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                     </TableCell>
-                    <TableCell className="font-medium">${order.totalAmount}</TableCell>
+                    <TableCell className="font-medium">TK {order.totalAmount}</TableCell>
                     <TableCell>
                       <Select 
                         value={order.paymentStatus || "Unpaid"} 
@@ -1054,7 +1054,7 @@ export default function DailyOrders() {
                         <TableCell>
                           {(item.liveWeight || item.quantity || 0).toFixed(2)} {item.itemSaleType === "Per PCS" ? "PCS" : "KG"}
                         </TableCell>
-                        <TableCell>${item.price}</TableCell>
+                        <TableCell>TK {item.price}</TableCell>
                         <TableCell>
                           {item.discountAmount > 0 && `TK ${item.discountAmount}`}
                           {item.discountAmount > 0 && item.discountPercentage > 0 && " + "}
@@ -1062,7 +1062,7 @@ export default function DailyOrders() {
                           {!item.discountAmount && !item.discountPercentage && "None"}
                         </TableCell>
                         <TableCell>
-                          ${(() => {
+                          TK {(() => {
                             const weight = item.liveWeight || item.quantity || 0;
                             let baseTotal = 0;
                             if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
@@ -1099,20 +1099,20 @@ export default function DailyOrders() {
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                       <div>
                         <Label>Subtotal</Label>
-                        <div className="text-lg font-medium">${totals.subtotal.toFixed(2)}</div>
+                        <div className="text-lg font-medium">TK {totals.subtotal.toFixed(2)}</div>
                       </div>
                       <div>
                         <Label>Item Discounts</Label>
-                        <div className="text-lg font-medium text-red-600">-${totals.itemDiscounts.toFixed(2)}</div>
+                        <div className="text-lg font-medium text-red-600">-TK {totals.itemDiscounts.toFixed(2)}</div>
                       </div>
                       <div>
                         <Label>After Item Discounts</Label>
-                        <div className="text-lg font-medium">${totals.subtotalAfterItemDiscounts.toFixed(2)}</div>
+                        <div className="text-lg font-medium">TK {totals.subtotalAfterItemDiscounts.toFixed(2)}</div>
                       </div>
                       <div>
                         <Label>Order Discounts</Label>
                         <div className="text-lg font-medium text-red-600">
-                          -${totals.orderDiscounts.toFixed(2)}
+                          -TK {totals.orderDiscounts.toFixed(2)}
                           {(orderData.orderDiscountAmount > 0 || orderData.orderDiscountPercentage > 0) && (
                             <div className="text-sm text-muted-foreground">
                               {orderData.orderDiscountAmount > 0 && `TK ${orderData.orderDiscountAmount}`}
@@ -1124,7 +1124,7 @@ export default function DailyOrders() {
                       </div>
                       <div>
                         <Label>Final Total</Label>
-                        <div className="text-xl font-bold">${totals.finalTotal.toFixed(2)}</div>
+                        <div className="text-xl font-bold">TK {totals.finalTotal.toFixed(2)}</div>
                       </div>
                     </div>
                   );
@@ -1160,7 +1160,7 @@ export default function DailyOrders() {
                     </div>
                     <div>
                       <Label>Order Total</Label>
-                      <div className="text-lg font-bold">${paymentModal.totalAmount}</div>
+                      <div className="text-lg font-bold">TK {paymentModal.totalAmount}</div>
                     </div>
                   </div>
                 </div>

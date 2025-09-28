@@ -352,7 +352,7 @@ export default function ExpenseManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-expenses">
-              ${totalAmount.toFixed(2)}
+              TK {totalAmount.toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
               {expenses.length} total expenses
@@ -366,7 +366,7 @@ export default function ExpenseManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-total-due">
-              ${totalDueAmount.toFixed(2)}
+              TK {totalDueAmount.toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
               Outstanding amount
@@ -380,7 +380,7 @@ export default function ExpenseManagement() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold" data-testid="text-paid-amount">
-              ${(totalAmount - totalDueAmount).toFixed(2)}
+              TK {(totalAmount - totalDueAmount).toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
               Amount paid
@@ -589,8 +589,8 @@ export default function ExpenseManagement() {
                       <TableCell>{expense.category}</TableCell>
                       <TableCell>{expense.weight || "-"}</TableCell>
                       <TableCell>{expense.qty}</TableCell>
-                      <TableCell>${expense.amount}</TableCell>
-                      <TableCell>{expense.dueAmount ? `$${expense.dueAmount}` : "-"}</TableCell>
+                      <TableCell>TK {expense.amount}</TableCell>
+                      <TableCell>{expense.dueAmount ? `TK ${expense.dueAmount}` : "-"}</TableCell>
                       <TableCell className="max-w-xs truncate">
                         {expense.comment || "-"}
                       </TableCell>

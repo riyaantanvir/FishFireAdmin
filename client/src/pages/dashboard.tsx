@@ -114,7 +114,7 @@ export default function Dashboard() {
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Revenue</p>
                 <p className="text-2xl font-bold text-foreground" data-testid="stat-revenue">
-                  ${totalRevenue.toLocaleString()}
+                  TK {totalRevenue.toLocaleString()}
                 </p>
               </div>
               <div className="w-12 h-12 bg-yellow-100 rounded-full flex items-center justify-center">
@@ -180,7 +180,7 @@ export default function Dashboard() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-medium text-foreground">${order.totalAmount}</p>
+                      <p className="font-medium text-foreground">TK {order.totalAmount}</p>
                       <p className="text-sm text-muted-foreground">
                         {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                       </p>
