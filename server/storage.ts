@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock } from "@shared/schema";
+import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock, type Payment, type InsertPayment } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -39,6 +39,13 @@ export interface IStorage {
   updateClosingStock(id: string, closingStock: Partial<ClosingStock>): Promise<ClosingStock | undefined>;
   deleteClosingStock(id: string): Promise<boolean>;
   
+  getPayments(): Promise<Payment[]>;
+  getPaymentsByDate(date: string): Promise<Payment[]>;
+  getPaymentByOrderId(orderId: string): Promise<Payment | undefined>;
+  createPayment(payment: InsertPayment): Promise<Payment>;
+  updatePayment(id: string, payment: Partial<Payment>): Promise<Payment | undefined>;
+  deletePayment(id: string): Promise<boolean>;
+  
   sessionStore: session.Store;
 }
 
@@ -49,6 +56,7 @@ export class MemStorage implements IStorage {
   private expenses: Map<string, Expense>;
   private openingStock: Map<string, OpeningStock>;
   private closingStock: Map<string, ClosingStock>;
+  private payments: Map<string, Payment>;
   public sessionStore: session.Store;
 
   constructor() {
@@ -58,6 +66,7 @@ export class MemStorage implements IStorage {
     this.expenses = new Map();
     this.openingStock = new Map();
     this.closingStock = new Map();
+    this.payments = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -284,6 +293,42 @@ export class MemStorage implements IStorage {
 
   async deleteClosingStock(id: string): Promise<boolean> {
     return this.closingStock.delete(id);
+  }
+
+  async getPayments(): Promise<Payment[]> {
+    return Array.from(this.payments.values());
+  }
+
+  async getPaymentsByDate(date: string): Promise<Payment[]> {
+    return Array.from(this.payments.values()).filter(payment => payment.paymentDate === date);
+  }
+
+  async getPaymentByOrderId(orderId: string): Promise<Payment | undefined> {
+    return Array.from(this.payments.values()).find(payment => payment.orderId === orderId);
+  }
+
+  async createPayment(insertPayment: InsertPayment): Promise<Payment> {
+    const id = randomUUID();
+    const payment: Payment = {
+      ...insertPayment,
+      id,
+      createdAt: new Date(),
+    };
+    this.payments.set(id, payment);
+    return payment;
+  }
+
+  async updatePayment(id: string, paymentUpdate: Partial<Payment>): Promise<Payment | undefined> {
+    const existingPayment = this.payments.get(id);
+    if (!existingPayment) return undefined;
+    
+    const updatedPayment = { ...existingPayment, ...paymentUpdate };
+    this.payments.set(id, updatedPayment);
+    return updatedPayment;
+  }
+
+  async deletePayment(id: string): Promise<boolean> {
+    return this.payments.delete(id);
   }
 }
 
