@@ -28,6 +28,7 @@ export interface IStorage {
   createExpense(expense: InsertExpense): Promise<Expense>;
   updateExpense(id: string, expense: Partial<Expense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<boolean>;
+  deleteAllExpenses(): Promise<number>;
   
   getOpeningStockByDate(date: string): Promise<OpeningStock[]>;
   createOpeningStock(openingStock: InsertOpeningStock): Promise<OpeningStock>;
@@ -239,6 +240,12 @@ export class MemStorage implements IStorage {
 
   async deleteExpense(id: string): Promise<boolean> {
     return this.expenses.delete(id);
+  }
+
+  async deleteAllExpenses(): Promise<number> {
+    const count = this.expenses.size;
+    this.expenses.clear();
+    return count;
   }
 
   async getOpeningStockByDate(date: string): Promise<OpeningStock[]> {

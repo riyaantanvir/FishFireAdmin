@@ -157,6 +157,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Delete all expenses
+  app.delete("/api/expenses", authenticateJWT, async (req, res) => {
+    try {
+      await storage.deleteAllExpenses();
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete all expenses" });
+    }
+  });
+
   // Stock Reconciliation API - Opening Stock
   app.get("/api/opening-stock/:date", authenticateJWT, async (req, res) => {
     try {
