@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense } from "@shared/schema";
+import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -29,6 +29,16 @@ export interface IStorage {
   updateExpense(id: string, expense: Partial<Expense>): Promise<Expense | undefined>;
   deleteExpense(id: string): Promise<boolean>;
   
+  getOpeningStockByDate(date: string): Promise<OpeningStock[]>;
+  createOpeningStock(openingStock: InsertOpeningStock): Promise<OpeningStock>;
+  updateOpeningStock(id: string, openingStock: Partial<OpeningStock>): Promise<OpeningStock | undefined>;
+  deleteOpeningStock(id: string): Promise<boolean>;
+  
+  getClosingStockByDate(date: string): Promise<ClosingStock[]>;
+  createClosingStock(closingStock: InsertClosingStock): Promise<ClosingStock>;
+  updateClosingStock(id: string, closingStock: Partial<ClosingStock>): Promise<ClosingStock | undefined>;
+  deleteClosingStock(id: string): Promise<boolean>;
+  
   sessionStore: session.Store;
 }
 
@@ -37,6 +47,8 @@ export class MemStorage implements IStorage {
   private orders: Map<string, Order>;
   private items: Map<string, Item>;
   private expenses: Map<string, Expense>;
+  private openingStock: Map<string, OpeningStock>;
+  private closingStock: Map<string, ClosingStock>;
   public sessionStore: session.Store;
 
   constructor() {
@@ -44,6 +56,8 @@ export class MemStorage implements IStorage {
     this.orders = new Map();
     this.items = new Map();
     this.expenses = new Map();
+    this.openingStock = new Map();
+    this.closingStock = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -214,6 +228,62 @@ export class MemStorage implements IStorage {
 
   async deleteExpense(id: string): Promise<boolean> {
     return this.expenses.delete(id);
+  }
+
+  async getOpeningStockByDate(date: string): Promise<OpeningStock[]> {
+    return Array.from(this.openingStock.values()).filter(stock => stock.date === date);
+  }
+
+  async createOpeningStock(insertOpeningStock: InsertOpeningStock): Promise<OpeningStock> {
+    const id = randomUUID();
+    const openingStock: OpeningStock = {
+      ...insertOpeningStock,
+      id,
+      createdAt: new Date(),
+    };
+    this.openingStock.set(id, openingStock);
+    return openingStock;
+  }
+
+  async updateOpeningStock(id: string, stockUpdate: Partial<OpeningStock>): Promise<OpeningStock | undefined> {
+    const existingStock = this.openingStock.get(id);
+    if (!existingStock) return undefined;
+    
+    const updatedStock = { ...existingStock, ...stockUpdate };
+    this.openingStock.set(id, updatedStock);
+    return updatedStock;
+  }
+
+  async deleteOpeningStock(id: string): Promise<boolean> {
+    return this.openingStock.delete(id);
+  }
+
+  async getClosingStockByDate(date: string): Promise<ClosingStock[]> {
+    return Array.from(this.closingStock.values()).filter(stock => stock.date === date);
+  }
+
+  async createClosingStock(insertClosingStock: InsertClosingStock): Promise<ClosingStock> {
+    const id = randomUUID();
+    const closingStock: ClosingStock = {
+      ...insertClosingStock,
+      id,
+      createdAt: new Date(),
+    };
+    this.closingStock.set(id, closingStock);
+    return closingStock;
+  }
+
+  async updateClosingStock(id: string, stockUpdate: Partial<ClosingStock>): Promise<ClosingStock | undefined> {
+    const existingStock = this.closingStock.get(id);
+    if (!existingStock) return undefined;
+    
+    const updatedStock = { ...existingStock, ...stockUpdate };
+    this.closingStock.set(id, updatedStock);
+    return updatedStock;
+  }
+
+  async deleteClosingStock(id: string): Promise<boolean> {
+    return this.closingStock.delete(id);
   }
 }
 
