@@ -15,6 +15,7 @@ export interface IStorage {
   createOrder(order: InsertOrder): Promise<Order>;
   updateOrder(id: string, order: Partial<Order>): Promise<Order | undefined>;
   deleteOrder(id: string): Promise<boolean>;
+  clearAllOrders(): Promise<number>;
   
   getItems(): Promise<Item[]>;
   getItem(id: string): Promise<Item | undefined>;
@@ -123,6 +124,12 @@ export class MemStorage implements IStorage {
     return this.orders.delete(id);
   }
 
+  async clearAllOrders(): Promise<number> {
+    const count = this.orders.size;
+    this.orders.clear();
+    return count;
+  }
+
   async getItems(): Promise<Item[]> {
     return Array.from(this.items.values()).sort((a, b) => a.name.localeCompare(b.name));
   }
@@ -139,6 +146,7 @@ export class MemStorage implements IStorage {
       description: insertItem.description || null,
       stock: insertItem.stock || 0,
       isActive: insertItem.isActive || "true",
+      weightPerPCS: insertItem.weightPerPCS || null,
       createdAt: new Date(),
     };
     this.items.set(id, item);

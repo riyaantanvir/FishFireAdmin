@@ -53,6 +53,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Bulk delete all orders endpoint - admin only
+  app.delete("/api/orders", authenticateJWT, async (req, res) => {
+    try {
+      // Check if user is admin (Admin/Admin credentials)
+      if (req.user?.username !== "Admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+      
+      const deletedCount = await storage.clearAllOrders();
+      res.json({ message: `Deleted ${deletedCount} orders`, count: deletedCount });
+    } catch (error) {
+      console.error('Clear orders error:', error);
+      res.status(500).json({ message: "Failed to delete orders" });
+    }
+  });
+
   // Items API
   app.get("/api/items", authenticateJWT, async (req, res) => {
     try {
