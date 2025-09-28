@@ -249,6 +249,55 @@ export default function ItemManagement() {
     return item.sellingPricePerPCS && parseFloat(item.sellingPricePerPCS) > 0;
   };
 
+  // CSV parser that handles quoted fields properly
+  const parseCSVLine = (line: string): string[] => {
+    const result: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let i = 0;
+
+    while (i < line.length) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // Handle escaped quotes ("")
+          current += '"';
+          i += 2;
+        } else {
+          // Toggle quote state
+          inQuotes = !inQuotes;
+          i++;
+        }
+      } else if (char === ',' && !inQuotes) {
+        // Field separator found outside quotes (don't trim to preserve intentional whitespace)
+        result.push(current);
+        current = '';
+        i++;
+      } else {
+        current += char;
+        i++;
+      }
+    }
+    
+    // Add the last field (don't trim to preserve intentional whitespace)
+    result.push(current);
+    
+    return result;
+  };
+
+  // CSV field escaping for proper generation
+  const escapeCSVField = (field: string): string => {
+    const stringField = String(field || '');
+    
+    // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
+      return `"${stringField.replace(/"/g, '""')}"`;
+    }
+    
+    return stringField;
+  };
+
   // CSV Template Download
   const downloadTemplate = () => {
     const headers = [
@@ -296,7 +345,7 @@ export default function ItemManagement() {
 
     const csvContent = [
       headers.join(','),
-      ...exampleRows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...exampleRows.map(row => row.map(cell => escapeCSVField(cell)).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -353,7 +402,7 @@ export default function ItemManagement() {
 
     const csvContent = [
       headers.join(','),
-      ...csvRows.map(row => row.map(cell => `"${cell}"`).join(','))
+      ...csvRows.map(row => row.map(cell => escapeCSVField(cell)).join(','))
     ].join('\n');
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -398,7 +447,7 @@ export default function ItemManagement() {
           return;
         }
 
-        const headers = lines[0].split(',').map(h => h.replace(/"/g, '').trim());
+        const headers = parseCSVLine(lines[0]);
         const expectedHeaders = ['date', 'name', 'itemType', 'itemSaleType', 'weightPerPCS', 'sellingPricePerKG', 'sellingPricePerPCS', 'description', 'stock', 'category', 'isActive'];
         
         // Check if basic required headers exist
@@ -419,7 +468,7 @@ export default function ItemManagement() {
 
         for (let i = 1; i < lines.length; i++) {
           try {
-            const values = lines[i].split(',').map(v => v.replace(/"/g, '').trim());
+            const values = parseCSVLine(lines[i]);
             const itemData: any = {};
 
             headers.forEach((header, index) => {
@@ -432,18 +481,18 @@ export default function ItemManagement() {
               continue;
             }
 
-            // Prepare item for API
+            // Prepare item for API (keep values as strings to match API expectations)
             const newItem: any = {
               itemNumber: getNextItemNumber() + itemsToImport.length,
               date: itemData.date || new Date().toISOString().split('T')[0],
               name: itemData.name,
               itemType: itemData.itemType,
               itemSaleType: itemData.itemSaleType,
-              weightPerPCS: itemData.weightPerPCS ? parseFloat(itemData.weightPerPCS) : undefined,
-              sellingPricePerKG: itemData.sellingPricePerKG ? parseFloat(itemData.sellingPricePerKG) : undefined,
-              sellingPricePerPCS: itemData.sellingPricePerPCS ? parseFloat(itemData.sellingPricePerPCS) : undefined,
+              weightPerPCS: itemData.weightPerPCS || undefined,
+              sellingPricePerKG: itemData.sellingPricePerKG || undefined,
+              sellingPricePerPCS: itemData.sellingPricePerPCS || undefined,
               description: itemData.description || '',
-              price: parseFloat(itemData.sellingPricePerKG || itemData.sellingPricePerPCS || '0'),
+              price: itemData.sellingPricePerKG || itemData.sellingPricePerPCS || '0',
               stock: parseInt(itemData.stock) || 0,
               category: itemData.category || itemData.itemType,
               isActive: itemData.isActive || 'true',
