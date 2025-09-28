@@ -34,6 +34,7 @@ export default function OrderManagement() {
   const [mergedOrders, setMergedOrders] = useState<any[]>([]);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const itemsPerPage = 20;
   
   const { toast } = useToast();
@@ -461,52 +462,86 @@ export default function OrderManagement() {
     }
   };
 
-  // Submit import data
+  // Submit import data with batch processing
   const submitImportMutation = useMutation({
     mutationFn: async () => {
-      const promises = mergedOrders.map(order => {
-        // Calculate totals for the order
-        let subtotal = 0;
-        let itemDiscounts = 0;
-        
-        order.items.forEach((item: any) => {
-          let itemTotal = 0;
-          if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-            itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
-          } else {
-            itemTotal = item.liveWeight * item.price;
-          }
-          subtotal += itemTotal;
+      const BATCH_SIZE = 50; // Process 50 orders at a time
+      const batches = [];
+      
+      // Split orders into batches
+      for (let i = 0; i < mergedOrders.length; i += BATCH_SIZE) {
+        batches.push(mergedOrders.slice(i, i + BATCH_SIZE));
+      }
+      
+      setImportProgress({ current: 0, total: mergedOrders.length });
+      
+      const results = [];
+      let processedCount = 0;
+      
+      // Process each batch sequentially to avoid overwhelming the server
+      for (const batch of batches) {
+        const batchPromises = batch.map(order => {
+          // Calculate totals for the order
+          let subtotal = 0;
+          let itemDiscounts = 0;
           
-          let discount = 0;
-          if (item.discountPercentage > 0) {
-            discount += itemTotal * (item.discountPercentage / 100);
-          }
-          if (item.discountAmount > 0) {
-            discount += item.discountAmount;
-          }
-          itemDiscounts += discount;
+          order.items.forEach((item: any) => {
+            let itemTotal = 0;
+            if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+              itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+            } else {
+              itemTotal = item.liveWeight * item.price;
+            }
+            subtotal += itemTotal;
+            
+            let discount = 0;
+            if (item.discountPercentage > 0) {
+              discount += itemTotal * (item.discountPercentage / 100);
+            }
+            if (item.discountAmount > 0) {
+              discount += item.discountAmount;
+            }
+            itemDiscounts += discount;
+          });
+
+          const finalTotal = Math.max(0, subtotal - itemDiscounts);
+
+          const orderData = {
+            orderNumber: order.orderNumber,
+            customerName: order.customerName,
+            orderDate: order.orderDate,
+            items: JSON.stringify({
+              items: order.items,
+              orderDiscountAmount: 0,
+              orderDiscountPercentage: 0,
+            }),
+            totalAmount: finalTotal.toString(),
+            status: "pending",
+          };
+
+          return apiRequest("POST", "/api/orders", orderData);
         });
 
-        const finalTotal = Math.max(0, subtotal - itemDiscounts);
-
-        const orderData = {
-          orderNumber: order.orderNumber,
-          customerName: order.customerName,
-          orderDate: order.orderDate,
-          items: JSON.stringify({
-            items: order.items,
-            orderDiscountAmount: 0,
-            orderDiscountPercentage: 0,
-          }),
-          totalAmount: finalTotal.toString(),
-          status: "pending",
-        };
-
-        return apiRequest("POST", "/api/orders", orderData);
-      });
-
-      return Promise.all(promises);
+        // Wait for current batch to complete before proceeding
+        const batchResults = await Promise.allSettled(batchPromises);
+        results.push(...batchResults);
+        
+        processedCount += batch.length;
+        setImportProgress({ current: processedCount, total: mergedOrders.length });
+        
+        // Small delay between batches to prevent server overload
+        if (batches.indexOf(batch) < batches.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      
+      // Check for failures
+      const failures = results.filter(result => result.status === 'rejected');
+      if (failures.length > 0) {
+        throw new Error(`${failures.length} orders failed to import`);
+      }
+      
+      return results;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
@@ -514,16 +549,18 @@ export default function OrderManagement() {
       setImportData([]);
       setImportErrors([]);
       setMergedOrders([]);
+      setImportProgress({ current: 0, total: 0 });
       
       toast({
         title: "Import successful",
         description: `Successfully imported ${mergedOrders.length} orders.`,
       });
     },
-    onError: () => {
+    onError: (error: any) => {
+      setImportProgress({ current: 0, total: 0 });
       toast({
         title: "Import failed",
-        description: "Failed to import orders. Please try again.",
+        description: error.message || "Failed to import orders. Please try again.",
         variant: "destructive",
       });
     },
@@ -1046,11 +1083,35 @@ export default function OrderManagement() {
               </Card>
             )}
 
+            {/* Progress Indicator */}
+            {submitImportMutation.isPending && importProgress.total > 0 && (
+              <Card>
+                <CardContent className="pt-6">
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm">
+                      <span>Importing orders...</span>
+                      <span>{importProgress.current} / {importProgress.total}</span>
+                    </div>
+                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                      <div 
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
+                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
+                      ></div>
+                    </div>
+                    <p className="text-xs text-gray-600 dark:text-gray-300">
+                      Processing in batches to ensure reliable import...
+                    </p>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
             {/* Action Buttons */}
             <div className="flex justify-end gap-3">
               <Button
                 variant="outline"
                 onClick={() => setImportPreviewModal(false)}
+                disabled={submitImportMutation.isPending}
                 data-testid="button-cancel-import"
               >
                 Cancel
@@ -1060,7 +1121,9 @@ export default function OrderManagement() {
                 disabled={mergedOrders.length === 0 || submitImportMutation.isPending}
                 data-testid="button-confirm-import"
               >
-                {submitImportMutation.isPending ? "Importing..." : `Import ${mergedOrders.length} Orders`}
+                {submitImportMutation.isPending 
+                  ? `Importing... (${importProgress.current}/${importProgress.total})` 
+                  : `Import ${mergedOrders.length} Orders`}
               </Button>
             </div>
           </div>
