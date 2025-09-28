@@ -334,7 +334,7 @@ export default function OrderManagement() {
       const headers = parseCSVLine(lines[0]);
       const expectedHeaders = ['Order Number', 'Customer Name', 'Order Date', 'Item Name', 'Live Weight', 'Unit Type', 'Unit Price', 'Item Total', 'Discount Amount', 'Discount %', 'Final Row Total'];
       
-      // Check if headers match expected format
+      // Check if headers match expected format (only these are required)
       const requiredHeaders = ['Order Number', 'Customer Name', 'Order Date', 'Item Name'];
       const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
       
@@ -389,16 +389,18 @@ export default function OrderManagement() {
             hasError = true;
           }
           
-          // Validate numeric fields
-          const liveWeight = parseFloat(rowData['Live Weight'] || '0');
-          if (isNaN(liveWeight) || liveWeight <= 0) {
-            errors.push(`Row ${i + 1}: Invalid Live Weight (must be a positive number)`);
+          // Validate numeric fields (optional - can be blank)
+          const liveWeight = rowData['Live Weight'] ? parseFloat(rowData['Live Weight']) : 1;
+          const unitPrice = rowData['Unit Price'] ? parseFloat(rowData['Unit Price']) : 0;
+          
+          // Only validate if values are provided
+          if (rowData['Live Weight'] && (isNaN(liveWeight) || liveWeight <= 0)) {
+            errors.push(`Row ${i + 1}: Invalid Live Weight (must be a positive number if provided)`);
             hasError = true;
           }
           
-          const unitPrice = parseFloat(rowData['Unit Price'] || '0');
-          if (isNaN(unitPrice) || unitPrice <= 0) {
-            errors.push(`Row ${i + 1}: Invalid Unit Price (must be a positive number)`);
+          if (rowData['Unit Price'] && (isNaN(unitPrice) || unitPrice < 0)) {
+            errors.push(`Row ${i + 1}: Invalid Unit Price (must be a non-negative number if provided)`);
             hasError = true;
           }
 
@@ -433,11 +435,11 @@ export default function OrderManagement() {
         
         orderGroups[orderNumber].items.push({
           name: row['Item Name'],
-          liveWeight: row['Live Weight'],
+          liveWeight: row['Live Weight'] || 1,
           itemSaleType: row['Unit Type'] === 'PCS' ? 'Per PCS' : 'Per KG',
-          price: row['Unit Price'],
-          discountAmount: row['Discount Amount'],
-          discountPercentage: row['Discount %'],
+          price: row['Unit Price'] || 0,
+          discountAmount: row['Discount Amount'] || 0,
+          discountPercentage: row['Discount %'] || 0,
         });
       });
 
