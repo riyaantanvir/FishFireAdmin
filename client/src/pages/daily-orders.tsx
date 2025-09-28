@@ -190,6 +190,7 @@ export default function DailyOrders() {
         items: JSON.stringify(data.items),
         totalAmount: orderSummary.finalTotal.toString(),
         status: "pending",
+        orderDate: data.orderDate,
       };
 
       const response = await apiRequest("POST", "/api/orders", orderData);
@@ -325,15 +326,6 @@ export default function DailyOrders() {
     }
   };
 
-  const toggleOrderExpansion = (orderId: string) => {
-    const newExpanded = new Set(expandedOrders);
-    if (newExpanded.has(orderId)) {
-      newExpanded.delete(orderId);
-    } else {
-      newExpanded.add(orderId);
-    }
-    setExpandedOrders(newExpanded);
-  };
 
   if (ordersLoading || itemsLoading) {
     return (
@@ -612,7 +604,19 @@ export default function DailyOrders() {
           ) : (
             <div className="space-y-2">
               {filteredOrders.map((order) => (
-                <Collapsible key={order.id}>
+                <Collapsible 
+                  key={order.id}
+                  open={expandedOrders.has(order.id)}
+                  onOpenChange={(open) => {
+                    const newExpanded = new Set(expandedOrders);
+                    if (open) {
+                      newExpanded.add(order.id);
+                    } else {
+                      newExpanded.delete(order.id);
+                    }
+                    setExpandedOrders(newExpanded);
+                  }}
+                >
                   <Card>
                     <CollapsibleTrigger asChild>
                       <CardHeader className="cursor-pointer hover:bg-muted/50">
@@ -632,7 +636,8 @@ export default function DailyOrders() {
                             <div className="text-right">
                               <p className="font-medium">${order.totalAmount}</p>
                               <p className="text-sm text-muted-foreground">
-                                {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                                {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
+                                 order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                               </p>
                             </div>
                             <Badge variant={getStatusColor(order.status)}>
@@ -671,9 +676,7 @@ export default function DailyOrders() {
                         </div>
                       </CardHeader>
                     </CollapsibleTrigger>
-                    <CollapsibleContent
-                      onClick={() => toggleOrderExpansion(order.id)}
-                    >
+                    <CollapsibleContent>
                       <CardContent>
                         <h5 className="font-medium mb-2">Order Items:</h5>
                         <Table>

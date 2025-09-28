@@ -17,6 +17,7 @@ export const orders = pgTable("orders", {
   items: text("items").notNull(), // JSON string of order items
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"),
+  orderDate: text("order_date").notNull(), // User-specified order date
   createdAt: timestamp("created_at").defaultNow(),
 });
 
