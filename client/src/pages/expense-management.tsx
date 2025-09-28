@@ -1,14 +1,15 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Trash2, Download, Upload, Plus, Edit, DollarSign } from "lucide-react";
+import { Trash2, Download, Upload, Plus, Edit, DollarSign, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -41,6 +42,9 @@ export default function ExpenseManagement() {
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [importProgress, setImportProgress] = useState(0);
   const [isImporting, setIsImporting] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -49,6 +53,26 @@ export default function ExpenseManagement() {
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
   });
+
+  // Pagination calculations
+  const totalExpenses = expenses.length;
+  const totalPages = Math.ceil(totalExpenses / pageSize);
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedExpenses = expenses.slice(startIndex, endIndex);
+
+  // Reset to first page when page size changes
+  const handlePageSizeChange = (newPageSize: number) => {
+    setPageSize(newPageSize);
+    setCurrentPage(1);
+  };
+
+  // Clamp current page when data changes to prevent landing on empty pages
+  useEffect(() => {
+    if (totalPages > 0 && currentPage > totalPages) {
+      setCurrentPage(Math.max(totalPages, 1));
+    }
+  }, [totalPages, currentPage]);
 
   // Form setup
   const form = useForm<ExpenseFormData>({
@@ -148,6 +172,29 @@ export default function ExpenseManagement() {
       toast({
         title: "Error",
         description: "Failed to delete expense.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete all expenses mutation
+  const deleteAllExpensesMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/expenses");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
+      setShowDeleteAllDialog(false);
+      setCurrentPage(1); // Reset to first page
+      toast({
+        title: "Success",
+        description: "All expenses deleted successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Error",
+        description: "Failed to delete all expenses.",
         variant: "destructive",
       });
     },
@@ -722,10 +769,66 @@ export default function ExpenseManagement() {
       {/* Expenses Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Expenses</CardTitle>
-          <CardDescription>
-            {expensesLoading ? "Loading..." : `${expenses.length} expense(s) found`}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Expenses</CardTitle>
+              <CardDescription>
+                {expensesLoading ? "Loading..." : `${expenses.length} expense(s) found`}
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 text-sm">
+                <span>Show:</span>
+                <Select value={pageSize.toString()} onValueChange={(value) => handlePageSizeChange(parseInt(value))}>
+                  <SelectTrigger className="w-20" data-testid="select-page-size">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="10">10</SelectItem>
+                    <SelectItem value="20">20</SelectItem>
+                    <SelectItem value="25">25</SelectItem>
+                    <SelectItem value="50">50</SelectItem>
+                  </SelectContent>
+                </Select>
+                <span>per page</span>
+              </div>
+              <AlertDialog open={showDeleteAllDialog} onOpenChange={setShowDeleteAllDialog}>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={expenses.length === 0 || deleteAllExpensesMutation.isPending}
+                    data-testid="button-delete-all"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete All
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle className="flex items-center gap-2">
+                      <AlertTriangle className="h-5 w-5 text-red-500" />
+                      Delete All Expenses
+                    </AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete all {expenses.length} expenses? This action cannot be undone and will permanently remove all expense records.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel data-testid="button-cancel-delete-all">Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteAllExpensesMutation.mutate()}
+                      disabled={deleteAllExpensesMutation.isPending}
+                      className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+                      data-testid="button-confirm-delete-all"
+                    >
+                      {deleteAllExpensesMutation.isPending ? "Deleting..." : "Delete All"}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+          </div>
         </CardHeader>
         <CardContent>
           <div className="rounded-md border">
@@ -756,8 +859,22 @@ export default function ExpenseManagement() {
                       No expenses found. Add your first expense to get started.
                     </TableCell>
                   </TableRow>
+                ) : paginatedExpenses.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={9} className="text-center">
+                      No expenses on this page. 
+                      <Button 
+                        variant="link" 
+                        onClick={() => setCurrentPage(1)} 
+                        className="ml-1 p-0 h-auto"
+                        data-testid="button-go-to-first-page"
+                      >
+                        Go to first page
+                      </Button>
+                    </TableCell>
+                  </TableRow>
                 ) : (
-                  expenses.map((expense) => (
+                  paginatedExpenses.map((expense) => (
                     <TableRow key={expense.id} data-testid={`row-expense-${expense.id}`}>
                       <TableCell>{expense.date}</TableCell>
                       <TableCell>{expense.personItem}</TableCell>
@@ -796,6 +913,43 @@ export default function ExpenseManagement() {
               </TableBody>
             </Table>
           </div>
+          
+          {/* Pagination Controls */}
+          {expenses.length > 0 && (
+            <div className="flex items-center justify-between px-2 py-4">
+              <div className="text-sm text-muted-foreground">
+                Showing {startIndex + 1} to {Math.min(endIndex, totalExpenses)} of {totalExpenses} expenses
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage - 1)}
+                  disabled={currentPage === 1}
+                  data-testid="button-previous-page"
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  <span className="text-sm">Page</span>
+                  <span className="text-sm font-medium">{currentPage}</span>
+                  <span className="text-sm">of</span>
+                  <span className="text-sm font-medium">{totalPages}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                  data-testid="button-next-page"
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
