@@ -45,13 +45,40 @@ export default function OrderManagement() {
   const endIndex = startIndex + itemsPerPage;
   const currentOrders = filteredOrders.slice(startIndex, endIndex);
 
-  // Helper function to parse order items
-  const parseOrderItems = (itemsJson: string) => {
+  // Helper function to parse order items and discounts
+  const parseOrderData = (itemsJson: string) => {
     try {
       const parsed = JSON.parse(itemsJson);
-      return Array.isArray(parsed) ? parsed : [];
+      
+      // Handle new wrapped format: { items, orderDiscountAmount, orderDiscountPercentage }
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) {
+        return {
+          items: parsed.items,
+          orderDiscountAmount: parsed.orderDiscountAmount || 0,
+          orderDiscountPercentage: parsed.orderDiscountPercentage || 0,
+        };
+      }
+      
+      // Handle legacy format: direct array
+      if (Array.isArray(parsed)) {
+        return {
+          items: parsed,
+          orderDiscountAmount: 0,
+          orderDiscountPercentage: 0,
+        };
+      }
+      
+      return {
+        items: [],
+        orderDiscountAmount: 0,
+        orderDiscountPercentage: 0,
+      };
     } catch {
-      return [];
+      return {
+        items: [],
+        orderDiscountAmount: 0,
+        orderDiscountPercentage: 0,
+      };
     }
   };
 
@@ -266,38 +293,149 @@ export default function OrderManagement() {
               {/* Order Items */}
               <div>
                 <h3 className="font-semibold mb-2">Order Items</h3>
-                <div className="overflow-x-auto">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Item Name</TableHead>
-                        <TableHead>Live Weight</TableHead>
-                        <TableHead>Unit</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Discount</TableHead>
-                        <TableHead>Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {parseOrderItems(viewOrderModal.items).map((item: any, index: number) => (
-                        <TableRow key={index}>
-                          <TableCell className="font-medium">{item.name}</TableCell>
-                          <TableCell>{item.liveWeight}</TableCell>
-                          <TableCell>{item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG'}</TableCell>
-                          <TableCell>{formatCurrency(item.price)}</TableCell>
-                          <TableCell>
-                            {item.discountAmount > 0 && formatCurrency(item.discountAmount)}
-                            {item.discountPercentage > 0 && `${item.discountPercentage}%`}
-                            {item.discountAmount === 0 && item.discountPercentage === 0 && '-'}
-                          </TableCell>
-                          <TableCell className="font-semibold">
-                            {formatCurrency(item.finalPrice || item.price)}
-                          </TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
+                {(() => {
+                  const orderData = parseOrderData(viewOrderModal.items);
+                  const { items, orderDiscountAmount, orderDiscountPercentage } = orderData;
+                  
+                  // Calculate totals
+                  let subtotal = 0;
+                  let totalItemDiscounts = 0;
+                  
+                  items.forEach((item: any) => {
+                    // Calculate item base total
+                    let itemTotal = 0;
+                    if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+                      itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+                    } else {
+                      itemTotal = item.liveWeight * item.price;
+                    }
+                    
+                    subtotal += itemTotal;
+                    
+                    // Calculate item discount
+                    let itemDiscount = 0;
+                    if (item.discountPercentage > 0) {
+                      itemDiscount += itemTotal * (item.discountPercentage / 100);
+                    }
+                    if (item.discountAmount > 0) {
+                      itemDiscount += item.discountAmount;
+                    }
+                    totalItemDiscounts += itemDiscount;
+                  });
+                  
+                  const subtotalAfterItemDiscounts = subtotal - totalItemDiscounts;
+                  
+                  let orderDiscounts = 0;
+                  if (orderDiscountPercentage > 0) {
+                    orderDiscounts += subtotalAfterItemDiscounts * (orderDiscountPercentage / 100);
+                  }
+                  if (orderDiscountAmount > 0) {
+                    orderDiscounts += orderDiscountAmount;
+                  }
+                  
+                  const finalTotal = Math.max(0, subtotalAfterItemDiscounts - orderDiscounts);
+                  
+                  return (
+                    <>
+                      <div className="overflow-x-auto">
+                        <Table>
+                          <TableHeader>
+                            <TableRow>
+                              <TableHead>Item Name</TableHead>
+                              <TableHead>Live Weight</TableHead>
+                              <TableHead>Unit</TableHead>
+                              <TableHead>Unit Price</TableHead>
+                              <TableHead>Item Total</TableHead>
+                              <TableHead>Item Discount</TableHead>
+                              <TableHead>Net Total</TableHead>
+                            </TableRow>
+                          </TableHeader>
+                          <TableBody>
+                            {items.map((item: any, index: number) => {
+                              // Calculate item totals
+                              let baseTotal = 0;
+                              if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+                                baseTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+                              } else {
+                                baseTotal = item.liveWeight * item.price;
+                              }
+                              
+                              let itemDiscount = 0;
+                              if (item.discountPercentage > 0) {
+                                itemDiscount += baseTotal * (item.discountPercentage / 100);
+                              }
+                              if (item.discountAmount > 0) {
+                                itemDiscount += item.discountAmount;
+                              }
+                              
+                              const netTotal = Math.max(0, baseTotal - itemDiscount);
+                              
+                              return (
+                                <TableRow key={index}>
+                                  <TableCell className="font-medium">{item.name}</TableCell>
+                                  <TableCell>{item.liveWeight}</TableCell>
+                                  <TableCell>{item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG'}</TableCell>
+                                  <TableCell>{formatCurrency(item.price)}</TableCell>
+                                  <TableCell>{formatCurrency(baseTotal)}</TableCell>
+                                  <TableCell>
+                                    {item.discountAmount > 0 && formatCurrency(item.discountAmount)}
+                                    {item.discountPercentage > 0 && (item.discountAmount > 0 ? ` + ${item.discountPercentage}%` : `${item.discountPercentage}%`)}
+                                    {item.discountAmount === 0 && item.discountPercentage === 0 && '-'}
+                                  </TableCell>
+                                  <TableCell className="font-semibold">
+                                    {formatCurrency(netTotal)}
+                                  </TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </div>
+                      
+                      {/* Order Summary */}
+                      <div className="mt-4 border-t pt-4">
+                        <div className="space-y-2 max-w-md ml-auto">
+                          <div className="flex justify-between">
+                            <span>Subtotal:</span>
+                            <span>{formatCurrency(subtotal)}</span>
+                          </div>
+                          {totalItemDiscounts > 0 && (
+                            <div className="flex justify-between text-red-600">
+                              <span>Item Discounts:</span>
+                              <span>-{formatCurrency(totalItemDiscounts)}</span>
+                            </div>
+                          )}
+                          <div className="flex justify-between">
+                            <span>Subtotal after Item Discounts:</span>
+                            <span>{formatCurrency(subtotalAfterItemDiscounts)}</span>
+                          </div>
+                          {orderDiscounts > 0 && (
+                            <>
+                              <div className="flex justify-between text-blue-600">
+                                <span>Order-level Discounts:</span>
+                                <span>-{formatCurrency(orderDiscounts)}</span>
+                              </div>
+                              {orderDiscountPercentage > 0 && (
+                                <div className="text-xs text-blue-600 ml-4">
+                                  {orderDiscountPercentage}% order discount
+                                </div>
+                              )}
+                              {orderDiscountAmount > 0 && (
+                                <div className="text-xs text-blue-600 ml-4">
+                                  {formatCurrency(orderDiscountAmount)} fixed discount
+                                </div>
+                              )}
+                            </>
+                          )}
+                          <div className="flex justify-between font-bold text-lg border-t pt-2">
+                            <span>Final Total:</span>
+                            <span>{formatCurrency(finalTotal)}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}

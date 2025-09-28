@@ -55,10 +55,11 @@ const orderFormSchema = z.object({
 type OrderItem = z.infer<typeof orderItemSchema>;
 type OrderForm = z.infer<typeof orderFormSchema>;
 
-// Helper function to filter orders by last 2 days
+// Helper function to filter orders by last 2 days (today and yesterday only)
 const filterOrdersByDays = (orders: Order[], days: number = 2): Order[] => {
-  const cutoffDate = new Date();
-  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const today = new Date();
+  const cutoffDate = new Date(today);
+  cutoffDate.setDate(today.getDate() - (days - 1)); // For 2 days: today and yesterday only
   const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
   
   return orders.filter(order => {
