@@ -32,6 +32,8 @@ export default function OrderManagement() {
   const [importData, setImportData] = useState<any[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [mergedOrders, setMergedOrders] = useState<any[]>([]);
+  const [deleteAllModal, setDeleteAllModal] = useState(false);
+  const [confirmationText, setConfirmationText] = useState("");
   const itemsPerPage = 20;
   
   const { toast } = useToast();
@@ -522,6 +524,30 @@ export default function OrderManagement() {
       toast({
         title: "Import failed",
         description: "Failed to import orders. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete all orders mutation
+  const deleteAllOrdersMutation = useMutation({
+    mutationFn: async () => {
+      return apiRequest("DELETE", "/api/orders");
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setDeleteAllModal(false);
+      setConfirmationText("");
+      
+      toast({
+        title: "All orders deleted",
+        description: `Successfully deleted ${data.count} orders.`,
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Delete failed",
+        description: "Failed to delete orders. Please try again.",
         variant: "destructive",
       });
     },
@@ -1037,6 +1063,89 @@ export default function OrderManagement() {
                 {submitImportMutation.isPending ? "Importing..." : `Import ${mergedOrders.length} Orders`}
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Danger Zone */}
+      {orders.length > 0 && (
+        <Card className="border-red-200 dark:border-red-800">
+          <CardHeader>
+            <CardTitle className="text-red-600 dark:text-red-400">Danger Zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium">Delete All Orders</p>
+                <p className="text-sm text-gray-600 dark:text-gray-300">
+                  Permanently delete all order records. This action cannot be undone.
+                </p>
+              </div>
+              <Button
+                variant="destructive"
+                onClick={() => setDeleteAllModal(true)}
+                data-testid="button-delete-all-orders"
+              >
+                Delete All Orders
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Delete All Confirmation Modal */}
+      <Dialog open={deleteAllModal} onOpenChange={() => {
+        setDeleteAllModal(false);
+        setConfirmationText("");
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete All Orders</DialogTitle>
+            <DialogDescription>
+              This action will permanently delete all {orders.length} order records and cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                <strong>Warning:</strong> This will permanently delete all order data including customer information, items, and transaction history.
+              </p>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium">
+                Type <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">DELETE ALL ORDERS</code> to confirm:
+              </label>
+              <Input
+                value={confirmationText}
+                onChange={(e) => setConfirmationText(e.target.value)}
+                placeholder="DELETE ALL ORDERS"
+                className="mt-2"
+                data-testid="input-delete-confirmation"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteAllModal(false);
+                setConfirmationText("");
+              }}
+              data-testid="button-cancel-delete"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => deleteAllOrdersMutation.mutate()}
+              disabled={confirmationText !== "DELETE ALL ORDERS" || deleteAllOrdersMutation.isPending}
+              data-testid="button-confirm-delete"
+            >
+              {deleteAllOrdersMutation.isPending ? "Deleting..." : "Delete All Orders"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
