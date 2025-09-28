@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, authenticateJWT } from "./auth";
 import { storage } from "./storage";
-import { insertOrderSchema, insertItemSchema } from "@shared/schema";
+import { insertOrderSchema, insertItemSchema, insertExpenseSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -110,6 +110,50 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete item" });
+    }
+  });
+
+  // Expenses API
+  app.get("/api/expenses", authenticateJWT, async (req, res) => {
+    try {
+      const expenses = await storage.getExpenses();
+      res.json(expenses);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch expenses" });
+    }
+  });
+
+  app.post("/api/expenses", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertExpenseSchema.parse(req.body);
+      const expense = await storage.createExpense(validatedData);
+      res.status(201).json(expense);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid expense data" });
+    }
+  });
+
+  app.put("/api/expenses/:id", authenticateJWT, async (req, res) => {
+    try {
+      const expense = await storage.updateExpense(req.params.id, req.body);
+      if (!expense) {
+        return res.status(404).json({ message: "Expense not found" });
+      }
+      res.json(expense);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update expense" });
+    }
+  });
+
+  app.delete("/api/expenses/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteExpense(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Expense not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete expense" });
     }
   });
 
