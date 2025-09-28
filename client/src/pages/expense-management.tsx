@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { format } from "date-fns";
-import { Trash2, Download, Upload, Plus, Edit, DollarSign, AlertTriangle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Trash2, Download, Upload, Plus, Edit, DollarSign, AlertTriangle, ChevronLeft, ChevronRight, Filter, Calendar, TrendingUp, BarChart3 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -46,6 +46,15 @@ export default function ExpenseManagement() {
   const [pageSize, setPageSize] = useState(25);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
   
+  // Filter states
+  const [dateFilter, setDateFilter] = useState("all");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [amountFilter, setAmountFilter] = useState("all");
+  const [paymentFilter, setPaymentFilter] = useState("all");
+  const [customDateFrom, setCustomDateFrom] = useState("");
+  const [customDateTo, setCustomDateTo] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+  
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -54,7 +63,7 @@ export default function ExpenseManagement() {
     queryKey: ["/api/expenses"],
   });
 
-  // Pagination calculations
+  // Original pagination calculations (kept for backward compatibility)
   const totalExpenses = expenses.length;
   const totalPages = Math.ceil(totalExpenses / pageSize);
   const startIndex = (currentPage - 1) * pageSize;
@@ -67,12 +76,143 @@ export default function ExpenseManagement() {
     setCurrentPage(1);
   };
 
+  // Filter functions
+  const getDateRange = (filter: string) => {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    
+    switch (filter) {
+      case "today":
+        return {
+          start: format(startOfToday, "yyyy-MM-dd"),
+          end: format(startOfToday, "yyyy-MM-dd")
+        };
+      case "yesterday": {
+        const yesterday = new Date(startOfToday);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return {
+          start: format(yesterday, "yyyy-MM-dd"),
+          end: format(yesterday, "yyyy-MM-dd")
+        };
+      }
+      case "thisWeek": {
+        const startOfWeek = new Date(startOfToday);
+        startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
+        return {
+          start: format(startOfWeek, "yyyy-MM-dd"),
+          end: format(startOfToday, "yyyy-MM-dd")
+        };
+      }
+      case "thisMonth": {
+        const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+        return {
+          start: format(startOfMonth, "yyyy-MM-dd"),
+          end: format(startOfToday, "yyyy-MM-dd")
+        };
+      }
+      case "lastMonth": {
+        const startOfLastMonth = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+        const endOfLastMonth = new Date(today.getFullYear(), today.getMonth(), 0);
+        return {
+          start: format(startOfLastMonth, "yyyy-MM-dd"),
+          end: format(endOfLastMonth, "yyyy-MM-dd")
+        };
+      }
+      case "custom":
+        // Only apply custom filter if both dates are provided
+        if (customDateFrom && customDateTo) {
+          return {
+            start: customDateFrom,
+            end: customDateTo
+          };
+        }
+        return null; // Skip filtering if dates are not complete
+      default:
+        return null;
+    }
+  };
+
+  // Apply all filters to expenses
+  const filteredExpenses = expenses.filter(expense => {
+    // Date filter
+    if (dateFilter !== "all") {
+      const dateRange = getDateRange(dateFilter);
+      if (dateRange && dateRange.start && dateRange.end) {
+        if (expense.date < dateRange.start || expense.date > dateRange.end) {
+          return false;
+        }
+      }
+    }
+
+    // Category filter
+    if (categoryFilter !== "all" && expense.category !== categoryFilter) {
+      return false;
+    }
+
+    // Amount filter
+    if (amountFilter !== "all") {
+      const amount = parseFloat(expense.amount);
+      switch (amountFilter) {
+        case "high":
+          if (amount < 1000) return false;
+          break;
+        case "medium":
+          if (amount < 100 || amount >= 1000) return false;
+          break;
+        case "low":
+          if (amount >= 100) return false;
+          break;
+      }
+    }
+
+    // Payment status filter
+    if (paymentFilter !== "all") {
+      const dueAmount = parseFloat(expense.dueAmount || "0");
+      switch (paymentFilter) {
+        case "paid":
+          if (dueAmount > 0) return false;
+          break;
+        case "partial":
+          if (dueAmount === 0) return false;
+          break;
+      }
+    }
+
+    return true;
+  });
+
+  // Update pagination calculations to use filtered data
+  const totalFilteredExpenses = filteredExpenses.length;
+  const filteredTotalPages = Math.ceil(totalFilteredExpenses / pageSize);
+  const filteredStartIndex = (currentPage - 1) * pageSize;
+  const filteredEndIndex = filteredStartIndex + pageSize;
+  const paginatedFilteredExpenses = filteredExpenses.slice(filteredStartIndex, filteredEndIndex);
+
   // Clamp current page when data changes to prevent landing on empty pages
   useEffect(() => {
-    if (totalPages > 0 && currentPage > totalPages) {
-      setCurrentPage(Math.max(totalPages, 1));
+    if (filteredTotalPages > 0 && currentPage > filteredTotalPages) {
+      setCurrentPage(Math.max(filteredTotalPages, 1));
     }
-  }, [totalPages, currentPage]);
+  }, [filteredTotalPages, currentPage]);
+
+  // Reset to first page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [dateFilter, categoryFilter, amountFilter, paymentFilter, customDateFrom, customDateTo]);
+
+  // Calculate analytics for filtered data
+  const categoryStats = filteredExpenses.reduce((acc, expense) => {
+    acc[expense.category] = (acc[expense.category] || 0) + parseFloat(expense.amount);
+    return acc;
+  }, {} as Record<string, number>);
+
+  const topCategories = Object.entries(categoryStats)
+    .sort(([,a], [,b]) => b - a)
+    .slice(0, 10);
+
+  const highestExpenses = [...filteredExpenses]
+    .sort((a, b) => parseFloat(b.amount) - parseFloat(a.amount))
+    .slice(0, 5);
 
   // Form setup
   const form = useForm<ExpenseFormData>({
@@ -507,9 +647,9 @@ export default function ExpenseManagement() {
     reader.readAsText(file, 'UTF-8');
   };
 
-  // Calculate total amounts
-  const totalAmount = expenses.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
-  const totalDueAmount = expenses.reduce((sum, expense) => sum + parseFloat(expense.dueAmount || "0"), 0);
+  // Calculate total amounts from filtered data
+  const totalAmount = filteredExpenses.reduce((sum, expense) => sum + parseFloat(expense.amount), 0);
+  const totalDueAmount = filteredExpenses.reduce((sum, expense) => sum + parseFloat(expense.dueAmount || "0"), 0);
 
   return (
     <div className="container mx-auto p-6 space-y-6">
@@ -524,8 +664,16 @@ export default function ExpenseManagement() {
         <div className="flex gap-2">
           <Button
             variant="outline"
+            onClick={() => setShowFilters(!showFilters)}
+            data-testid="button-toggle-filters"
+          >
+            <Filter className="h-4 w-4 mr-2" />
+            Filters
+          </Button>
+          <Button
+            variant="outline"
             onClick={handleExport}
-            disabled={expenses.length === 0}
+            disabled={filteredExpenses.length === 0}
             data-testid="button-export-expenses"
           >
             <Download className="h-4 w-4 mr-2" />
@@ -565,6 +713,192 @@ export default function ExpenseManagement() {
         style={{ display: "none" }}
       />
 
+      {/* Filters Section */}
+      {showFilters && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Filter className="h-5 w-5" />
+              Filters & Analytics
+            </CardTitle>
+            <CardDescription>
+              Filter expenses by date, category, amount, and payment status
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            {/* Filter Controls */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Date Filter */}
+              <div className="space-y-2">
+                <Label>Date Range</Label>
+                <Select value={dateFilter} onValueChange={setDateFilter}>
+                  <SelectTrigger data-testid="select-date-filter">
+                    <SelectValue placeholder="Select date range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Time</SelectItem>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="thisWeek">This Week</SelectItem>
+                    <SelectItem value="thisMonth">This Month</SelectItem>
+                    <SelectItem value="lastMonth">Last Month</SelectItem>
+                    <SelectItem value="custom">Custom Range</SelectItem>
+                  </SelectContent>
+                </Select>
+                {dateFilter === "custom" && (
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <Input
+                        type="date"
+                        value={customDateFrom}
+                        onChange={(e) => setCustomDateFrom(e.target.value)}
+                        placeholder="From"
+                        data-testid="input-custom-date-from"
+                      />
+                      <Input
+                        type="date"
+                        value={customDateTo}
+                        onChange={(e) => setCustomDateTo(e.target.value)}
+                        placeholder="To"
+                        data-testid="input-custom-date-to"
+                      />
+                    </div>
+                    {(!customDateFrom || !customDateTo) && (
+                      <p className="text-xs text-muted-foreground">
+                        Please select both start and end dates to apply custom date filter
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
+              {/* Category Filter */}
+              <div className="space-y-2">
+                <Label>Category</Label>
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger data-testid="select-category-filter">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                    <SelectItem value="Food & Supplies">Food & Supplies</SelectItem>
+                    <SelectItem value="Equipment">Equipment</SelectItem>
+                    <SelectItem value="Transport">Transport</SelectItem>
+                    <SelectItem value="Utilities">Utilities</SelectItem>
+                    <SelectItem value="Maintenance">Maintenance</SelectItem>
+                    <SelectItem value="Other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Amount Filter */}
+              <div className="space-y-2">
+                <Label>Amount Range</Label>
+                <Select value={amountFilter} onValueChange={setAmountFilter}>
+                  <SelectTrigger data-testid="select-amount-filter">
+                    <SelectValue placeholder="Select amount range" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Amounts</SelectItem>
+                    <SelectItem value="low">Low (&lt; TK 100)</SelectItem>
+                    <SelectItem value="medium">Medium (TK 100-999)</SelectItem>
+                    <SelectItem value="high">High (≥ TK 1000)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Payment Status Filter */}
+              <div className="space-y-2">
+                <Label>Payment Status</Label>
+                <Select value={paymentFilter} onValueChange={setPaymentFilter}>
+                  <SelectTrigger data-testid="select-payment-filter">
+                    <SelectValue placeholder="Select payment status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Payments</SelectItem>
+                    <SelectItem value="paid">Fully Paid</SelectItem>
+                    <SelectItem value="partial">Partially Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Clear Filters Button */}
+            <div className="flex justify-start">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setDateFilter("all");
+                  setCategoryFilter("all");
+                  setAmountFilter("all");
+                  setPaymentFilter("all");
+                  setCustomDateFrom("");
+                  setCustomDateTo("");
+                }}
+                data-testid="button-clear-filters"
+              >
+                Clear All Filters
+              </Button>
+            </div>
+
+            {/* Analytics Section */}
+            {filteredExpenses.length > 0 && (
+              <div className="border-t pt-6">
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Quick Analytics
+                </h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* Top Categories */}
+                  <div>
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <TrendingUp className="h-4 w-4" />
+                      Top 10 Categories
+                    </h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {topCategories.map(([category, amount], index) => (
+                        <div key={category} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <span className="text-sm">
+                            {index + 1}. {category}
+                          </span>
+                          <span className="font-medium text-sm">TK {amount.toFixed(2)}</span>
+                        </div>
+                      ))}
+                      {topCategories.length === 0 && (
+                        <p className="text-muted-foreground text-sm">No data available</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Highest Expenses */}
+                  <div>
+                    <h4 className="font-medium mb-2 flex items-center gap-2">
+                      <DollarSign className="h-4 w-4" />
+                      Top 5 Highest Expenses
+                    </h4>
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {highestExpenses.map((expense, index) => (
+                        <div key={expense.id} className="flex items-center justify-between p-2 bg-muted rounded">
+                          <div className="text-sm">
+                            <div className="font-medium">{expense.personItem}</div>
+                            <div className="text-muted-foreground">{expense.category}</div>
+                          </div>
+                          <span className="font-medium text-sm">TK {expense.amount}</span>
+                        </div>
+                      ))}
+                      {highestExpenses.length === 0 && (
+                        <p className="text-muted-foreground text-sm">No data available</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
       {/* Summary Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
@@ -577,7 +911,7 @@ export default function ExpenseManagement() {
               TK {totalAmount.toFixed(2)}
             </div>
             <p className="text-xs text-muted-foreground">
-              {expenses.length} total expenses
+              {filteredExpenses.length} expenses
             </p>
           </CardContent>
         </Card>
@@ -773,7 +1107,7 @@ export default function ExpenseManagement() {
             <div>
               <CardTitle>Expenses</CardTitle>
               <CardDescription>
-                {expensesLoading ? "Loading..." : `${expenses.length} expense(s) found`}
+                {expensesLoading ? "Loading..." : `${filteredExpenses.length} expense(s) found${filteredExpenses.length !== expenses.length ? ` (filtered from ${expenses.length})` : ""}`}
               </CardDescription>
             </div>
             <div className="flex items-center gap-2">
@@ -853,28 +1187,34 @@ export default function ExpenseManagement() {
                       Loading expenses...
                     </TableCell>
                   </TableRow>
-                ) : expenses.length === 0 ? (
+                ) : filteredExpenses.length === 0 && expenses.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center">
                       No expenses found. Add your first expense to get started.
                     </TableCell>
                   </TableRow>
-                ) : paginatedExpenses.length === 0 ? (
+                ) : paginatedFilteredExpenses.length === 0 ? (
                   <TableRow>
                     <TableCell colSpan={9} className="text-center">
-                      No expenses on this page. 
-                      <Button 
-                        variant="link" 
-                        onClick={() => setCurrentPage(1)} 
-                        className="ml-1 p-0 h-auto"
-                        data-testid="button-go-to-first-page"
-                      >
-                        Go to first page
-                      </Button>
+                      {filteredExpenses.length === 0 ? (
+                        "No expenses match the current filters. Try adjusting your filter criteria."
+                      ) : (
+                        <>
+                          No expenses on this page. 
+                          <Button 
+                            variant="link" 
+                            onClick={() => setCurrentPage(1)} 
+                            className="ml-1 p-0 h-auto"
+                            data-testid="button-go-to-first-page"
+                          >
+                            Go to first page
+                          </Button>
+                        </>
+                      )}
                     </TableCell>
                   </TableRow>
                 ) : (
-                  paginatedExpenses.map((expense) => (
+                  paginatedFilteredExpenses.map((expense) => (
                     <TableRow key={expense.id} data-testid={`row-expense-${expense.id}`}>
                       <TableCell>{expense.date}</TableCell>
                       <TableCell>{expense.personItem}</TableCell>
@@ -915,10 +1255,10 @@ export default function ExpenseManagement() {
           </div>
           
           {/* Pagination Controls */}
-          {expenses.length > 0 && (
+          {filteredExpenses.length > 0 && (
             <div className="flex items-center justify-between px-2 py-4">
               <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {Math.min(endIndex, totalExpenses)} of {totalExpenses} expenses
+                Showing {filteredStartIndex + 1} to {Math.min(filteredEndIndex, totalFilteredExpenses)} of {totalFilteredExpenses} expenses
               </div>
               <div className="flex items-center gap-2">
                 <Button
@@ -935,13 +1275,13 @@ export default function ExpenseManagement() {
                   <span className="text-sm">Page</span>
                   <span className="text-sm font-medium">{currentPage}</span>
                   <span className="text-sm">of</span>
-                  <span className="text-sm font-medium">{totalPages}</span>
+                  <span className="text-sm font-medium">{filteredTotalPages}</span>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === totalPages}
+                  disabled={currentPage === filteredTotalPages}
                   data-testid="button-next-page"
                 >
                   Next
