@@ -14,13 +14,13 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2, Plus, Eye } from "lucide-react";
+import { Search, Trash2, Plus, Eye, DollarSign } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Order, Item } from "@shared/schema";
+import type { Order, Item, Payment, InsertPayment } from "@shared/schema";
 import { z } from "zod";
 import {
   Dialog,
@@ -52,8 +52,30 @@ const orderFormSchema = z.object({
   orderDiscountPercentage: z.number().min(0).max(100, "Order discount percentage must be between 0-100").optional(),
 });
 
+// Payment form schema
+const paymentFormSchema = z.object({
+  // Cash breakdown
+  cash1000: z.number().min(0).default(0),
+  cash500: z.number().min(0).default(0),
+  cash200: z.number().min(0).default(0),
+  cash100: z.number().min(0).default(0),
+  cash50: z.number().min(0).default(0),
+  cash20: z.number().min(0).default(0),
+  cash10: z.number().min(0).default(0),
+  cash5: z.number().min(0).default(0),
+  cash2: z.number().min(0).default(0),
+  cash1: z.number().min(0).default(0),
+  // Digital payments
+  bkash: z.number().min(0).default(0),
+  rocket: z.number().min(0).default(0),
+  nogod: z.number().min(0).default(0),
+  card: z.number().min(0).default(0),
+  bank: z.number().min(0).default(0),
+});
+
 type OrderItem = z.infer<typeof orderItemSchema>;
 type OrderForm = z.infer<typeof orderFormSchema>;
+type PaymentForm = z.infer<typeof paymentFormSchema>;
 
 // Helper function to filter orders by last 2 days (today and yesterday only)
 const filterOrdersByDays = (orders: Order[], days: number = 2): Order[] => {
@@ -72,6 +94,7 @@ export default function DailyOrders() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
+  const [paymentModal, setPaymentModal] = useState<Order | null>(null);
   const { toast } = useToast();
 
   // Fetch orders and items
@@ -331,6 +354,134 @@ export default function DailyOrders() {
       });
     },
   });
+
+  // Payment form
+  const paymentForm = useForm<PaymentForm>({
+    resolver: zodResolver(paymentFormSchema),
+    defaultValues: {
+      cash1000: 0,
+      cash500: 0,
+      cash200: 0,
+      cash100: 0,
+      cash50: 0,
+      cash20: 0,
+      cash10: 0,
+      cash5: 0,
+      cash2: 0,
+      cash1: 0,
+      bkash: 0,
+      rocket: 0,
+      nogod: 0,
+      card: 0,
+      bank: 0,
+    },
+  });
+
+  // Payment mutations
+  const createPaymentMutation = useMutation({
+    mutationFn: async (paymentData: InsertPayment) => {
+      return await apiRequest("POST", "/api/payments", paymentData);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setPaymentModal(null);
+      paymentForm.reset();
+      toast({
+        title: "Success",
+        description: "Payment recorded successfully",
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const updateOrderPaymentMutation = useMutation({
+    mutationFn: async ({ orderId, paymentStatus }: { orderId: string; paymentStatus: string }) => {
+      return await apiRequest("PUT", `/api/orders/${orderId}`, { paymentStatus });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Payment handlers
+  const handlePaymentStatusChange = (order: Order, status: string) => {
+    if (status === "Paid") {
+      setPaymentModal(order);
+    } else {
+      updateOrderPaymentMutation.mutate({ orderId: order.id, paymentStatus: status });
+    }
+  };
+
+  // Calculate cash total
+  const calculateCashTotal = (formData: PaymentForm) => {
+    return (
+      formData.cash1000 * 1000 +
+      formData.cash500 * 500 +
+      formData.cash200 * 200 +
+      formData.cash100 * 100 +
+      formData.cash50 * 50 +
+      formData.cash20 * 20 +
+      formData.cash10 * 10 +
+      formData.cash5 * 5 +
+      formData.cash2 * 2 +
+      formData.cash1 * 1
+    );
+  };
+
+  // Calculate digital total
+  const calculateDigitalTotal = (formData: PaymentForm) => {
+    return formData.bkash + formData.rocket + formData.nogod + formData.card + formData.bank;
+  };
+
+  // Handle payment submission
+  const handlePaymentSubmit = (data: PaymentForm) => {
+    if (!paymentModal) return;
+
+    const totalCash = calculateCashTotal(data);
+    const totalDigital = calculateDigitalTotal(data);
+    const totalPaid = totalCash + totalDigital;
+
+    const paymentData: InsertPayment = {
+      orderId: paymentModal.id,
+      orderNumber: paymentModal.orderNumber,
+      customerName: paymentModal.customerName,
+      orderTotal: paymentModal.totalAmount,
+      totalPaid: totalPaid.toString(),
+      cash1000: data.cash1000,
+      cash500: data.cash500,
+      cash200: data.cash200,
+      cash100: data.cash100,
+      cash50: data.cash50,
+      cash20: data.cash20,
+      cash10: data.cash10,
+      cash5: data.cash5,
+      cash2: data.cash2,
+      cash1: data.cash1,
+      totalCash: totalCash.toString(),
+      bkash: data.bkash.toString(),
+      rocket: data.rocket.toString(),
+      nogod: data.nogod.toString(),
+      card: data.card.toString(),
+      bank: data.bank.toString(),
+      totalDigital: totalDigital.toString(),
+      paymentDate: new Date().toISOString().split('T')[0],
+    };
+
+    createPaymentMutation.mutate(paymentData);
+  };
 
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -787,6 +938,7 @@ export default function DailyOrders() {
                   <TableHead>Customer Name</TableHead>
                   <TableHead>Order Date</TableHead>
                   <TableHead>Final Total</TableHead>
+                  <TableHead>Payment Status</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -800,6 +952,27 @@ export default function DailyOrders() {
                        order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                     </TableCell>
                     <TableCell className="font-medium">${order.totalAmount}</TableCell>
+                    <TableCell>
+                      <Select 
+                        value={order.paymentStatus || "Unpaid"} 
+                        onValueChange={(value) => handlePaymentStatusChange(order, value)}
+                      >
+                        <SelectTrigger className="w-28" data-testid={`select-payment-status-${order.id}`}>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Unpaid">
+                            <Badge variant="destructive">Unpaid</Badge>
+                          </SelectItem>
+                          <SelectItem value="Partial">
+                            <Badge variant="secondary">Partial</Badge>
+                          </SelectItem>
+                          <SelectItem value="Paid">
+                            <Badge variant="default">Paid</Badge>
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
                         <Button
@@ -956,6 +1129,193 @@ export default function DailyOrders() {
                 })()}
               </div>
             </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Payment Entry Modal */}
+      <Dialog open={!!paymentModal} onOpenChange={() => setPaymentModal(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Payment Entry</DialogTitle>
+            <DialogDescription>
+              Record payment for Order {paymentModal?.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+          {paymentModal && (
+            <Form {...paymentForm}>
+              <form onSubmit={paymentForm.handleSubmit(handlePaymentSubmit)} className="space-y-6">
+                {/* Order Summary */}
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Label>Customer</Label>
+                      <div className="font-medium">{paymentModal.customerName}</div>
+                    </div>
+                    <div>
+                      <Label>Order Number</Label>
+                      <div className="font-medium">{paymentModal.orderNumber}</div>
+                    </div>
+                    <div>
+                      <Label>Order Total</Label>
+                      <div className="text-lg font-bold">${paymentModal.totalAmount}</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cash Payment Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Cash Payment (Note-wise Breakdown)</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {[
+                      { name: "cash1000", label: "TK 1000", value: 1000 },
+                      { name: "cash500", label: "TK 500", value: 500 },
+                      { name: "cash200", label: "TK 200", value: 200 },
+                      { name: "cash100", label: "TK 100", value: 100 },
+                      { name: "cash50", label: "TK 50", value: 50 },
+                      { name: "cash20", label: "TK 20", value: 20 },
+                      { name: "cash10", label: "TK 10", value: 10 },
+                      { name: "cash5", label: "TK 5", value: 5 },
+                      { name: "cash2", label: "TK 2", value: 2 },
+                      { name: "cash1", label: "TK 1", value: 1 },
+                    ].map((note) => (
+                      <FormField
+                        key={note.name}
+                        control={paymentForm.control}
+                        name={note.name as keyof PaymentForm}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{note.label}</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="1"
+                                {...field}
+                                onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                data-testid={`input-${note.name}`}
+                              />
+                            </FormControl>
+                            <div className="text-xs text-muted-foreground">
+                              = TK {((field.value || 0) * note.value).toLocaleString()}
+                            </div>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="text-sm font-medium">
+                      Total Cash: TK {calculateCashTotal(paymentForm.watch()).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Digital Payment Section */}
+                <div className="space-y-4">
+                  <h3 className="text-lg font-semibold">Digital Payments</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {[
+                      { name: "bkash", label: "bKash" },
+                      { name: "rocket", label: "Rocket" },
+                      { name: "nogod", label: "Nogod" },
+                      { name: "card", label: "Card" },
+                      { name: "bank", label: "Bank Transfer" },
+                    ].map((method) => (
+                      <FormField
+                        key={method.name}
+                        control={paymentForm.control}
+                        name={method.name as keyof PaymentForm}
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>{method.label}</FormLabel>
+                            <FormControl>
+                              <Input
+                                type="number"
+                                min="0"
+                                step="0.01"
+                                {...field}
+                                onChange={(e) => field.onChange(Number(e.target.value) || 0)}
+                                data-testid={`input-${method.name}`}
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <div className="p-3 bg-muted/30 rounded-lg">
+                    <div className="text-sm font-medium">
+                      Total Digital: TK {calculateDigitalTotal(paymentForm.watch()).toLocaleString()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Payment Summary */}
+                <div className="p-4 bg-muted/50 rounded-lg">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                      <Label>Total Cash</Label>
+                      <div className="text-lg font-medium">
+                        TK {calculateCashTotal(paymentForm.watch()).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Total Digital</Label>
+                      <div className="text-lg font-medium">
+                        TK {calculateDigitalTotal(paymentForm.watch()).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Grand Total</Label>
+                      <div className="text-xl font-bold">
+                        TK {(calculateCashTotal(paymentForm.watch()) + calculateDigitalTotal(paymentForm.watch())).toLocaleString()}
+                      </div>
+                    </div>
+                    <div>
+                      <Label>Order Total</Label>
+                      <div className={`text-xl font-bold ${
+                        Math.abs((calculateCashTotal(paymentForm.watch()) + calculateDigitalTotal(paymentForm.watch())) - Number(paymentModal.totalAmount)) < 0.01
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }`}>
+                        TK {Number(paymentModal.totalAmount).toLocaleString()}
+                      </div>
+                    </div>
+                  </div>
+                  {Math.abs((calculateCashTotal(paymentForm.watch()) + calculateDigitalTotal(paymentForm.watch())) - Number(paymentModal.totalAmount)) >= 0.01 && (
+                    <div className="mt-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-800 rounded-lg">
+                      <div className="text-red-800 dark:text-red-200 font-medium">
+                        Payment amount does not match order total!
+                        <br />
+                        Difference: TK {Math.abs((calculateCashTotal(paymentForm.watch()) + calculateDigitalTotal(paymentForm.watch())) - Number(paymentModal.totalAmount)).toFixed(2)}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex justify-end gap-4">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setPaymentModal(null)}
+                    data-testid="button-cancel-payment"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={createPaymentMutation.isPending}
+                    data-testid="button-submit-payment"
+                  >
+                    Record Payment
+                  </Button>
+                </div>
+              </form>
+            </Form>
           )}
         </DialogContent>
       </Dialog>
