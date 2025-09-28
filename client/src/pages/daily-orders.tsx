@@ -55,6 +55,18 @@ const orderFormSchema = z.object({
 type OrderItem = z.infer<typeof orderItemSchema>;
 type OrderForm = z.infer<typeof orderFormSchema>;
 
+// Helper function to filter orders by last 2 days
+const filterOrdersByDays = (orders: Order[], days: number = 2): Order[] => {
+  const cutoffDate = new Date();
+  cutoffDate.setDate(cutoffDate.getDate() - days);
+  const cutoffDateStr = cutoffDate.toISOString().split('T')[0];
+  
+  return orders.filter(order => {
+    const orderDate = order.orderDate;
+    return orderDate >= cutoffDateStr;
+  });
+};
+
 export default function DailyOrders() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
@@ -62,9 +74,12 @@ export default function DailyOrders() {
   const { toast } = useToast();
 
   // Fetch orders and items
-  const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
+  const { data: allOrders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
   });
+
+  // Filter orders to show only last 2 days for Daily Orders
+  const orders = filterOrdersByDays(allOrders, 2);
 
   const { data: items = [], isLoading: itemsLoading } = useQuery<Item[]>({
     queryKey: ["/api/items"],
