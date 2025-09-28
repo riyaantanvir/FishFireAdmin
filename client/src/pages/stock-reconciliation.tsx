@@ -93,9 +93,9 @@ export default function StockReconciliation() {
     },
   });
 
-  // Calculate sold quantities from orders for the selected date
+  // Calculate sold quantities from orders for the selected date, tracking by unit
   const soldQuantities = useMemo(() => {
-    const soldMap = new Map<string, number>();
+    const soldMap = new Map<string, { PCS: number; KG: number }>();
     
     const dayOrders = orders.filter(order => order.orderDate === selectedDate);
     
@@ -106,11 +106,26 @@ export default function StockReconciliation() {
           orderItems.items.forEach((item: any) => {
             const itemName = item.name;
             const liveWeight = parseFloat(item.liveWeight || 0);
+            const itemSaleType = item.itemSaleType;
+            const weightPerPCS = parseFloat(item.weightPerPCS || 0);
             
-            if (soldMap.has(itemName)) {
-              soldMap.set(itemName, soldMap.get(itemName)! + liveWeight);
+            if (!soldMap.has(itemName)) {
+              soldMap.set(itemName, { PCS: 0, KG: 0 });
+            }
+            
+            const soldData = soldMap.get(itemName)!;
+            
+            if (itemSaleType === "Per PCS") {
+              // For PCS items: liveWeight is the quantity in pieces
+              soldData.PCS += liveWeight;
+              
+              // Also calculate equivalent weight if we have weightPerPCS
+              if (weightPerPCS > 0) {
+                soldData.KG += liveWeight * weightPerPCS;
+              }
             } else {
-              soldMap.set(itemName, liveWeight);
+              // For KG items: liveWeight is the weight in KG
+              soldData.KG += liveWeight;
             }
           });
         }
@@ -129,15 +144,18 @@ export default function StockReconciliation() {
     // Add opening stock entries
     openingStock.forEach(stock => {
       const key = `${stock.itemId}-${stock.unit}`;
+      const soldData = soldQuantities.get(stock.itemName) || { PCS: 0, KG: 0 };
+      const expectedUsage = stock.unit === "PCS" ? soldData.PCS : soldData.KG;
+      
       reportMap.set(key, {
         itemId: stock.itemId,
         itemName: stock.itemName,
         unit: stock.unit,
         opening: parseFloat(stock.quantity),
         closing: 0,
-        sold: soldQuantities.get(stock.itemName) || 0,
+        sold: expectedUsage,
         actualUsage: 0,
-        expectedUsage: soldQuantities.get(stock.itemName) || 0,
+        expectedUsage: expectedUsage,
         difference: 0,
         isMatch: false,
       });
@@ -153,15 +171,18 @@ export default function StockReconciliation() {
         existing.difference = existing.actualUsage - existing.expectedUsage;
         existing.isMatch = Math.abs(existing.difference) < 0.001; // Account for floating point precision
       } else {
+        const soldData = soldQuantities.get(stock.itemName) || { PCS: 0, KG: 0 };
+        const expectedUsage = stock.unit === "PCS" ? soldData.PCS : soldData.KG;
+        
         const row: StockReportRow = {
           itemId: stock.itemId,
           itemName: stock.itemName,
           unit: stock.unit,
           opening: 0,
           closing: parseFloat(stock.quantity),
-          sold: soldQuantities.get(stock.itemName) || 0,
+          sold: expectedUsage,
           actualUsage: -parseFloat(stock.quantity), // Negative because we don't have opening
-          expectedUsage: soldQuantities.get(stock.itemName) || 0,
+          expectedUsage: expectedUsage,
           difference: 0,
           isMatch: false,
         };
