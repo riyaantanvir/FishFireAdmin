@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, authenticateJWT } from "./auth";
 import { storage } from "./storage";
-import { insertOrderSchema, insertItemSchema, insertExpenseSchema } from "@shared/schema";
+import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -154,6 +154,94 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete expense" });
+    }
+  });
+
+  // Stock Reconciliation API - Opening Stock
+  app.get("/api/opening-stock/:date", authenticateJWT, async (req, res) => {
+    try {
+      const openingStock = await storage.getOpeningStockByDate(req.params.date);
+      res.json(openingStock);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch opening stock" });
+    }
+  });
+
+  app.post("/api/opening-stock", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertOpeningStockSchema.parse(req.body);
+      const openingStock = await storage.createOpeningStock(validatedData);
+      res.status(201).json(openingStock);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid opening stock data" });
+    }
+  });
+
+  app.put("/api/opening-stock/:id", authenticateJWT, async (req, res) => {
+    try {
+      const openingStock = await storage.updateOpeningStock(req.params.id, req.body);
+      if (!openingStock) {
+        return res.status(404).json({ message: "Opening stock entry not found" });
+      }
+      res.json(openingStock);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update opening stock" });
+    }
+  });
+
+  app.delete("/api/opening-stock/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteOpeningStock(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Opening stock entry not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete opening stock" });
+    }
+  });
+
+  // Stock Reconciliation API - Closing Stock
+  app.get("/api/closing-stock/:date", authenticateJWT, async (req, res) => {
+    try {
+      const closingStock = await storage.getClosingStockByDate(req.params.date);
+      res.json(closingStock);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch closing stock" });
+    }
+  });
+
+  app.post("/api/closing-stock", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertClosingStockSchema.parse(req.body);
+      const closingStock = await storage.createClosingStock(validatedData);
+      res.status(201).json(closingStock);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid closing stock data" });
+    }
+  });
+
+  app.put("/api/closing-stock/:id", authenticateJWT, async (req, res) => {
+    try {
+      const closingStock = await storage.updateClosingStock(req.params.id, req.body);
+      if (!closingStock) {
+        return res.status(404).json({ message: "Closing stock entry not found" });
+      }
+      res.json(closingStock);
+    } catch (error) {
+      res.status(400).json({ message: "Failed to update closing stock" });
+    }
+  });
+
+  app.delete("/api/closing-stock/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteClosingStock(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Closing stock entry not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete closing stock" });
     }
   });
 
