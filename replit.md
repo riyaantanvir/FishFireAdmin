@@ -111,3 +111,10 @@ The application is configured for modern development workflows:
 - Added proper unit conversions ensuring actual and expected usage are comparable across item types
 - Completed full CRUD operations with PostgreSQL storage for opening and closing stock data
 - Integrated navigation and routing for seamless access to stock reconciliation features
+
+### September 28, 2025 - Enhanced Reports Module & Example CSV Feature
+- Restructured Reports Module with new cards section displaying Total Orders, Total Sales, Total Expenses, and Net Profit
+- Implemented enhanced filter system with Today (default), Yesterday, This Month, Last Month, Custom Date Range, and All Data options
+- Replaced tab-based reports with three dedicated report tables: Payment & Sales Report, Stock Report, and Expense Report
+- Added Example CSV download feature to Expense Management for users to understand the expected CSV format
+- Example CSV includes realistic fish business expense data with proper field formatting for easy import template

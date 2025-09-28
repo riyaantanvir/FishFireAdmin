@@ -257,6 +257,37 @@ export default function ExpenseManagement() {
     });
   };
 
+  // Example CSV Export
+  const handleExampleExport = () => {
+    const csvHeaders = ["Date", "Person/Item", "Category", "Weight", "Qty", "Amount", "Due Amount", "Comment"];
+    const exampleData = [
+      ["2024-01-15", "Fish Supplier A", "Raw Materials", "25.5", "1", "2500.00", "0.00", "Fresh Hilsa fish purchase"],
+      ["2024-01-15", "Electricity Company", "Utilities", "", "1", "800.00", "200.00", "Monthly electricity bill"],
+      ["2024-01-16", "Transport Service", "Transportation", "", "1", "300.00", "0.00", "Fish delivery to market"],
+      ["2024-01-16", "Ice Supplier", "Consumables", "50", "1", "150.00", "0.00", "Ice for fish preservation"],
+      ["2024-01-17", "Staff Salary", "Labor", "", "1", "5000.00", "0.00", "Monthly salary payment"],
+      ["2024-01-17", "Market Rent", "Rent", "", "1", "1200.00", "0.00", "Shop rent for January"],
+      ["2024-01-18", "Packaging Materials", "Supplies", "10", "5", "250.00", "0.00", "Polythene bags and boxes"],
+    ];
+
+    const csvContent = [csvHeaders, ...exampleData]
+      .map(row => row.map(field => `"${field}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "expense_example.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+
+    toast({
+      title: "Example CSV downloaded",
+      description: "Sample expense data exported successfully.",
+    });
+  };
+
   // CSV Import
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -316,6 +347,14 @@ export default function ExpenseManagement() {
           >
             <Download className="h-4 w-4 mr-2" />
             Export CSV
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExampleExport}
+            data-testid="button-example-csv"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Example CSV
           </Button>
           <Button
             variant="outline"
