@@ -314,6 +314,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Payment Reports API
+  app.get("/api/payment-reports", authenticateJWT, async (req, res) => {
+    try {
+      const { dateFrom, dateTo } = req.query;
+      const fromDate = typeof dateFrom === 'string' ? dateFrom : new Date().toISOString().split('T')[0];
+      const toDate = typeof dateTo === 'string' ? dateTo : new Date().toISOString().split('T')[0];
+      
+      const payments = await storage.getPaymentReports(fromDate, toDate);
+      res.json(payments);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch payment reports" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }

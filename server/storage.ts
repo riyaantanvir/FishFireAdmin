@@ -42,6 +42,7 @@ export interface IStorage {
   getPayments(): Promise<Payment[]>;
   getPaymentsByDate(date: string): Promise<Payment[]>;
   getPaymentByOrderId(orderId: string): Promise<Payment | undefined>;
+  getPaymentReports(dateFrom: string, dateTo: string): Promise<Payment[]>;
   createPayment(payment: InsertPayment): Promise<Payment>;
   updatePayment(id: string, payment: Partial<Payment>): Promise<Payment | undefined>;
   deletePayment(id: string): Promise<boolean>;
@@ -306,6 +307,12 @@ export class MemStorage implements IStorage {
 
   async getPaymentByOrderId(orderId: string): Promise<Payment | undefined> {
     return Array.from(this.payments.values()).find(payment => payment.orderId === orderId);
+  }
+
+  async getPaymentReports(dateFrom: string, dateTo: string): Promise<Payment[]> {
+    return Array.from(this.payments.values()).filter(payment => 
+      payment.paymentDate >= dateFrom && payment.paymentDate <= dateTo
+    );
   }
 
   async createPayment(insertPayment: InsertPayment): Promise<Payment> {

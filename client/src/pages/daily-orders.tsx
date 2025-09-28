@@ -384,6 +384,7 @@ export default function DailyOrders() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-reports"] });
       setPaymentModal(null);
       paymentForm.reset();
       toast({
@@ -406,6 +407,7 @@ export default function DailyOrders() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/payment-reports"] });
     },
     onError: (error: Error) => {
       toast({
