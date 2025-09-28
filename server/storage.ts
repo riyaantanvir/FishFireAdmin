@@ -52,6 +52,7 @@ export class MemStorage implements IStorage {
       id: randomUUID(),
       username: "Admin",
       password: "admin_hashed_password", // We'll handle this specially in auth
+      role: "admin",
       createdAt: new Date(),
     };
     this.users.set(adminUser.id, adminUser);
@@ -83,6 +84,7 @@ export class MemStorage implements IStorage {
     const user: User = { 
       ...insertUser, 
       id,
+      role: insertUser.role || "user",
       createdAt: new Date(),
     };
     this.users.set(id, user);

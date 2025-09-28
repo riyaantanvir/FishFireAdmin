@@ -56,8 +56,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Bulk delete all orders endpoint - admin only
   app.delete("/api/orders", authenticateJWT, async (req, res) => {
     try {
-      // Check if user is admin (Admin/Admin credentials)
-      if (req.user?.username !== "Admin") {
+      // Check if user has admin role
+      if (req.user?.role !== "admin") {
         return res.status(403).json({ message: "Admin access required" });
       }
       

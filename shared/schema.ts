@@ -7,6 +7,7 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  role: text("role").notNull().default("user"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -43,6 +44,9 @@ export const items = pgTable("items", {
 export const insertUserSchema = createInsertSchema(users).pick({
   username: true,
   password: true,
+  role: true,
+}).extend({
+  role: z.enum(["user", "admin"]).optional(),
 });
 
 export const insertOrderSchema = createInsertSchema(orders).omit({
