@@ -1,33 +1,87 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Download, DollarSign, Calculator, TrendingUp, AlertCircle, FileText } from "lucide-react";
+import { Download, DollarSign, Calculator, TrendingUp, AlertCircle, FileText, Package, Receipt, Banknote } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
-import type { Order, Payment } from "@shared/schema";
+import type { Order, Payment, Expense, Item, OpeningStock, ClosingStock } from "@shared/schema";
 
 export default function Reports() {
+  const [filterType, setFilterType] = useState("today");
   const [dateFrom, setDateFrom] = useState(new Date().toISOString().split('T')[0]);
   const [dateTo, setDateTo] = useState(new Date().toISOString().split('T')[0]);
-  const [activeTab, setActiveTab] = useState("payment-summary");
 
-  // Fetch orders and payments data
+  // Calculate date ranges based on filter type
+  const getDateRange = () => {
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const thisMonthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const thisMonthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    
+    const lastMonthStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+    const lastMonthEnd = new Date(today.getFullYear(), today.getMonth(), 0);
+
+    switch (filterType) {
+      case "today":
+        return {
+          from: today.toISOString().split('T')[0],
+          to: today.toISOString().split('T')[0]
+        };
+      case "yesterday":
+        return {
+          from: yesterday.toISOString().split('T')[0],
+          to: yesterday.toISOString().split('T')[0]
+        };
+      case "this-month":
+        return {
+          from: thisMonthStart.toISOString().split('T')[0],
+          to: thisMonthEnd.toISOString().split('T')[0]
+        };
+      case "last-month":
+        return {
+          from: lastMonthStart.toISOString().split('T')[0],
+          to: lastMonthEnd.toISOString().split('T')[0]
+        };
+      case "custom":
+        return { from: dateFrom, to: dateTo };
+      case "all":
+        return { from: "2020-01-01", to: "2099-12-31" };
+      default:
+        return {
+          from: today.toISOString().split('T')[0],
+          to: today.toISOString().split('T')[0]
+        };
+    }
+  };
+
+  const currentDateRange = getDateRange();
+
+  // Fetch all required data
   const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
   });
 
+  const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
+    queryKey: ["/api/expenses"],
+  });
+
+  const { data: items = [], isLoading: itemsLoading } = useQuery<Item[]>({
+    queryKey: ["/api/items"],
+  });
+
   const { data: paymentReports = [], isLoading: paymentsLoading } = useQuery<any[]>({
-    queryKey: ["/api/payment-reports", { dateFrom, dateTo }],
+    queryKey: ["/api/payment-reports", currentDateRange],
     queryFn: async () => {
-      const response = await fetch(`/api/payment-reports?dateFrom=${dateFrom}&dateTo=${dateTo}`, {
+      const response = await fetch(`/api/payment-reports?dateFrom=${currentDateRange.from}&dateTo=${currentDateRange.to}`, {
         headers: {
           Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
         },
@@ -40,24 +94,31 @@ export default function Reports() {
     },
   });
 
-  // Filter orders by date range
-  const filteredOrders = orders.filter(order => {
-    const orderDate = order.orderDate || (order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '');
-    return orderDate >= dateFrom && orderDate <= dateTo;
+  // Fetch opening and closing stock for current date range  
+  const { data: openingStock = [], isLoading: openingStockLoading } = useQuery<OpeningStock[]>({
+    queryKey: ["/api/opening-stock", currentDateRange.from],
   });
 
-  // Calculate payment summary
-  const paymentSummary = {
-    totalOrders: filteredOrders.length,
-    totalRevenue: filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0),
-    paidOrders: filteredOrders.filter(order => order.paymentStatus === 'Paid').length,
-    unpaidOrders: filteredOrders.filter(order => order.paymentStatus === 'Unpaid' || !order.paymentStatus).length,
-    partialOrders: filteredOrders.filter(order => order.paymentStatus === 'Partial').length,
-    paidAmount: paymentReports.reduce((sum, payment) => sum + Number(payment.totalPaid || 0), 0),
-    outstandingAmount: 0, // Will calculate based on paid vs total
-  };
+  const { data: closingStock = [], isLoading: closingStockLoading } = useQuery<ClosingStock[]>({
+    queryKey: ["/api/closing-stock", currentDateRange.to],
+  });
 
-  paymentSummary.outstandingAmount = paymentSummary.totalRevenue - paymentSummary.paidAmount;
+  // Filter data by date range
+  const filteredOrders = orders.filter(order => {
+    const orderDate = order.orderDate || (order.createdAt ? new Date(order.createdAt).toISOString().split('T')[0] : '');
+    return orderDate >= currentDateRange.from && orderDate <= currentDateRange.to;
+  });
+
+  const filteredExpenses = expenses.filter(expense => {
+    const expenseDate = expense.date || (expense.createdAt ? new Date(expense.createdAt).toISOString().split('T')[0] : '');
+    return expenseDate >= currentDateRange.from && expenseDate <= currentDateRange.to;
+  });
+
+  // Calculate summary data for cards
+  const totalOrders = filteredOrders.length;
+  const totalSales = filteredOrders.reduce((sum, order) => sum + Number(order.totalAmount), 0);
+  const totalExpenses = filteredExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
+  const netProfit = totalSales - totalExpenses;
 
   // Calculate cash counter data
   const cashCounter = paymentReports.reduce((acc, payment) => {
