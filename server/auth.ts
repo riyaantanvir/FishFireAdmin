@@ -44,6 +44,7 @@ export function setupAuth(app: Express) {
     resave: false,
     saveUninitialized: false,
     store: storage.sessionStore,
+    name: 'fishfire.sid', // Custom session name
     cookie: {
       secure: false, // Set to false for development
       httpOnly: true,
@@ -61,6 +62,16 @@ export function setupAuth(app: Express) {
   app.use(session(sessionSettings));
   app.use(passport.initialize());
   app.use(passport.session());
+  
+  // Add session debugging middleware after session is set up
+  app.use((req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      console.log(`${req.method} ${req.path} - Session ID: ${req.sessionID || 'none'}`);
+      console.log('Session data:', req.session);
+      console.log('Is authenticated:', req.isAuthenticated());
+    }
+    next();
+  });
 
   passport.use(
     new LocalStrategy(async (username, password, done) => {
@@ -113,6 +124,9 @@ export function setupAuth(app: Express) {
   });
 
   app.get("/api/user", (req, res) => {
+    console.log('GET /api/user - isAuthenticated:', req.isAuthenticated());
+    console.log('GET /api/user - session:', req.session);
+    console.log('GET /api/user - user:', req.user);
     if (!req.isAuthenticated()) return res.sendStatus(401);
     res.json(req.user);
   });

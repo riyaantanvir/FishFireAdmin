@@ -37,7 +37,8 @@ export class MemStorage implements IStorage {
     this.items = new Map();
     
     this.sessionStore = new MemoryStore({
-      checkPeriod: 86400000,
+      checkPeriod: 86400000, // 24 hours
+      ttl: 86400000, // 24 hours TTL
     });
     
     // Create default admin user immediately - no async needed
