@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -38,6 +39,8 @@ export default function ExpenseManagement() {
   const [importModal, setImportModal] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [importProgress, setImportProgress] = useState(0);
+  const [isImporting, setIsImporting] = useState(false);
   
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -150,17 +153,23 @@ export default function ExpenseManagement() {
     },
   });
 
-  // Import expenses mutation with batch processing
+  // Import expenses mutation with batch processing and progress tracking
   const importExpensesMutation = useMutation({
     mutationFn: async () => {
+      setIsImporting(true);
+      setImportProgress(0);
+      
       const BATCH_SIZE = 10; // Process 10 expenses at a time
       const results = [];
       let successCount = 0;
       let errorCount = 0;
+      const totalBatches = Math.ceil(importData.length / BATCH_SIZE);
 
       // Process in batches
       for (let i = 0; i < importData.length; i += BATCH_SIZE) {
         const batch = importData.slice(i, i + BATCH_SIZE);
+        const currentBatch = Math.floor(i / BATCH_SIZE) + 1;
+        
         const batchPromises = batch.map(async (expense, index) => {
           try {
             const expenseData: InsertExpense = {
@@ -187,6 +196,10 @@ export default function ExpenseManagement() {
         const batchResults = await Promise.allSettled(batchPromises);
         results.push(...batchResults);
 
+        // Update progress
+        const progress = (currentBatch / totalBatches) * 100;
+        setImportProgress(Math.round(progress));
+
         // Small delay between batches to prevent overwhelming the server
         if (i + BATCH_SIZE < importData.length) {
           await new Promise(resolve => setTimeout(resolve, 100));
@@ -196,10 +209,17 @@ export default function ExpenseManagement() {
       return { successCount, errorCount, totalCount: importData.length };
     },
     onSuccess: (result) => {
+      setImportProgress(100);
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
-      setImportModal(false);
-      setImportData([]);
-      setImportErrors([]);
+      
+      // Small delay to show 100% completion before closing
+      setTimeout(() => {
+        setIsImporting(false);
+        setImportModal(false);
+        setImportData([]);
+        setImportErrors([]);
+        setImportProgress(0);
+      }, 1500);
       
       if (result.errorCount > 0) {
         toast({
@@ -215,6 +235,8 @@ export default function ExpenseManagement() {
       }
     },
     onError: (error) => {
+      setIsImporting(false);
+      setImportProgress(0);
       console.error("Import error:", error);
       toast({
         title: "Import failed",
@@ -801,8 +823,33 @@ export default function ExpenseManagement() {
                 </CardContent>
               </Card>
             )}
+
+            {/* Progress Bar */}
+            {isImporting && (
+              <Card className="border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-950">
+                <CardHeader>
+                  <CardTitle className="text-blue-800 dark:text-blue-200">Importing Expenses</CardTitle>
+                  <CardDescription className="text-blue-700 dark:text-blue-300">
+                    Processing {importData.length} expenses in batches...
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between text-sm text-blue-700 dark:text-blue-300">
+                      <span>Progress</span>
+                      <span>{importProgress}%</span>
+                    </div>
+                    <Progress 
+                      value={importProgress} 
+                      className="w-full" 
+                      data-testid="progress-import"
+                    />
+                  </div>
+                </CardContent>
+              </Card>
+            )}
             
-            {importData.length > 0 && (
+            {importData.length > 0 && !isImporting && (
               <>
                 <div>
                   <h3 className="text-lg font-semibold mb-2">Preview ({importData.length} expenses)</h3>
@@ -854,10 +901,10 @@ export default function ExpenseManagement() {
                   </Button>
                   <Button
                     onClick={() => importExpensesMutation.mutate()}
-                    disabled={importData.length === 0 || importExpensesMutation.isPending || importErrors.length > 0}
+                    disabled={importData.length === 0 || importExpensesMutation.isPending || importErrors.length > 0 || isImporting}
                     data-testid="button-confirm-import"
                   >
-                    {importExpensesMutation.isPending ? "Importing..." : `Import ${importData.length} Expenses`}
+                    {isImporting ? `Importing... ${importProgress}%` : `Import ${importData.length} Expenses`}
                   </Button>
                 </div>
               </>
