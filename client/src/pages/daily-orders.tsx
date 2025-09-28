@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2, Plus, ChevronDown, ChevronRight } from "lucide-react";
+import { Search, Trash2, Plus, Eye } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -23,10 +23,12 @@ import { useToast } from "@/hooks/use-toast";
 import type { Order, Item } from "@shared/schema";
 import { z } from "zod";
 import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 // Order item schema
 const orderItemSchema = z.object({
@@ -38,12 +40,14 @@ const orderItemSchema = z.object({
   discountPercentage: z.number().min(0).max(100, "Discount percentage must be between 0-100").optional(),
 });
 
-// Order form schema
+// Order form schema with order-level discounts
 const orderFormSchema = z.object({
   customerName: z.string().min(1, "Customer name is required"),
   orderNumber: z.string().min(1, "Order number is required"),
   orderDate: z.string().min(1, "Order date is required"),
   items: z.array(orderItemSchema).min(1, "At least one item is required"),
+  orderDiscountAmount: z.number().min(0, "Order discount amount must be positive").optional(),
+  orderDiscountPercentage: z.number().min(0).max(100, "Order discount percentage must be between 0-100").optional(),
 });
 
 type OrderItem = z.infer<typeof orderItemSchema>;
@@ -52,7 +56,7 @@ type OrderForm = z.infer<typeof orderFormSchema>;
 export default function DailyOrders() {
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [expandedOrders, setExpandedOrders] = useState<Set<string>>(new Set());
+  const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
   const { toast } = useToast();
 
   // Fetch orders and items
@@ -74,6 +78,10 @@ export default function DailyOrders() {
     discountPercentage: 0,
   }]);
 
+  // Order-level discount state
+  const [orderDiscountAmount, setOrderDiscountAmount] = useState(0);
+  const [orderDiscountPercentage, setOrderDiscountPercentage] = useState(0);
+
   const form = useForm<OrderForm>({
     resolver: zodResolver(orderFormSchema),
     defaultValues: {
@@ -81,20 +89,25 @@ export default function DailyOrders() {
       orderNumber: `ORD-${Date.now()}`,
       orderDate: new Date().toISOString().split('T')[0],
       items: orderItems,
+      orderDiscountAmount: 0,
+      orderDiscountPercentage: 0,
     },
   });
 
-  // Auto-calculate totals
+  // Auto-calculate totals with order-level discounts
   const [orderSummary, setOrderSummary] = useState({
     subtotal: 0,
-    totalDiscount: 0,
+    itemDiscounts: 0,
+    subtotalAfterItemDiscounts: 0,
+    orderDiscounts: 0,
     finalTotal: 0,
   });
 
   useEffect(() => {
     let subtotal = 0;
-    let totalDiscount = 0;
+    let itemDiscounts = 0;
 
+    // Calculate item-level totals and discounts
     orderItems.forEach(item => {
       if (item.quantity && item.price) {
         const itemTotal = item.quantity * item.price;
@@ -109,21 +122,36 @@ export default function DailyOrders() {
           itemDiscount += item.discountAmount;
         }
         
-        totalDiscount += itemDiscount;
+        itemDiscounts += itemDiscount;
       }
     });
 
-    const finalTotal = Math.max(0, subtotal - totalDiscount);
+    const subtotalAfterItemDiscounts = subtotal - itemDiscounts;
+
+    // Calculate order-level discounts
+    let orderDiscounts = 0;
+    if (orderDiscountPercentage > 0) {
+      orderDiscounts = subtotalAfterItemDiscounts * (orderDiscountPercentage / 100);
+    }
+    if (orderDiscountAmount > 0) {
+      orderDiscounts += orderDiscountAmount;
+    }
+
+    const finalTotal = Math.max(0, subtotalAfterItemDiscounts - orderDiscounts);
 
     setOrderSummary({
       subtotal: Math.round(subtotal * 100) / 100,
-      totalDiscount: Math.round(totalDiscount * 100) / 100,
+      itemDiscounts: Math.round(itemDiscounts * 100) / 100,
+      subtotalAfterItemDiscounts: Math.round(subtotalAfterItemDiscounts * 100) / 100,
+      orderDiscounts: Math.round(orderDiscounts * 100) / 100,
       finalTotal: Math.round(finalTotal * 100) / 100,
     });
 
-    // Update form with current items
+    // Update form with current values
     form.setValue("items", orderItems);
-  }, [orderItems, form]);
+    form.setValue("orderDiscountAmount", orderDiscountAmount);
+    form.setValue("orderDiscountPercentage", orderDiscountPercentage);
+  }, [orderItems, orderDiscountAmount, orderDiscountPercentage, form]);
 
   // Add new item row
   const addItemRow = () => {
@@ -150,7 +178,7 @@ export default function DailyOrders() {
     const newItems = [...orderItems];
     newItems[index] = { ...newItems[index], [field]: value };
 
-    // Auto-fill item name and price when item is selected
+    // Auto-fill item name and price when item is selected (price is now read-only)
     if (field === 'itemId' && value) {
       const selectedItem = items.find(item => item.id === value);
       if (selectedItem) {
@@ -183,11 +211,15 @@ export default function DailyOrders() {
 
   const createOrderMutation = useMutation({
     mutationFn: async (data: OrderForm) => {
-      // Format order data
+      // Format order data with order-level discounts
       const orderData = {
         orderNumber: data.orderNumber,
         customerName: data.customerName,
-        items: JSON.stringify(data.items),
+        items: JSON.stringify({
+          items: data.items,
+          orderDiscountAmount: data.orderDiscountAmount || 0,
+          orderDiscountPercentage: data.orderDiscountPercentage || 0,
+        }),
         totalAmount: orderSummary.finalTotal.toString(),
         status: "pending",
         orderDate: data.orderDate,
@@ -206,6 +238,8 @@ export default function DailyOrders() {
         orderNumber: newOrderNumber,
         orderDate: new Date().toISOString().split('T')[0],
         items: [],
+        orderDiscountAmount: 0,
+        orderDiscountPercentage: 0,
       });
       
       setOrderItems([{
@@ -216,6 +250,9 @@ export default function DailyOrders() {
         discountAmount: 0,
         discountPercentage: 0,
       }]);
+
+      setOrderDiscountAmount(0);
+      setOrderDiscountPercentage(0);
       
       toast({
         title: "Success",
@@ -251,20 +288,6 @@ export default function DailyOrders() {
     },
   });
 
-  const updateOrderStatusMutation = useMutation({
-    mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
-      const response = await apiRequest("PUT", `/api/orders/${orderId}`, { status });
-      return response.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      toast({
-        title: "Success",
-        description: "Order status updated successfully",
-      });
-    },
-  });
-
   const filteredOrders = orders.filter(order => {
     const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
@@ -294,38 +317,61 @@ export default function DailyOrders() {
     createOrderMutation.mutate(values);
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "completed":
-        return "default";
-      case "pending":
-        return "secondary";
-      case "cancelled":
-        return "destructive";
-      default:
-        return "secondary";
-    }
-  };
-
-  const formatOrderItems = (itemsString: string) => {
+  // Parse order items with order-level discounts
+  const parseOrderData = (itemsString: string) => {
     try {
-      const items = JSON.parse(itemsString);
-      return items.map((item: any) => 
-        `${item.name} (${item.quantity}x)`
-      ).join(', ');
+      const parsed = JSON.parse(itemsString);
+      // Handle both old format (array) and new format (object with items and discounts)
+      if (Array.isArray(parsed)) {
+        return { items: parsed, orderDiscountAmount: 0, orderDiscountPercentage: 0 };
+      }
+      return parsed;
     } catch {
-      return itemsString;
+      return { items: [], orderDiscountAmount: 0, orderDiscountPercentage: 0 };
     }
   };
 
-  const parseOrderItems = (itemsString: string) => {
-    try {
-      return JSON.parse(itemsString);
-    } catch {
-      return [];
-    }
-  };
+  // Calculate order total for display
+  const calculateOrderTotal = (itemsString: string) => {
+    const orderData = parseOrderData(itemsString);
+    let subtotal = 0;
+    let itemDiscounts = 0;
 
+    orderData.items.forEach((item: any) => {
+      if (item.quantity && item.price) {
+        const itemTotal = item.quantity * item.price;
+        subtotal += itemTotal;
+
+        let itemDiscount = 0;
+        if (item.discountPercentage > 0) {
+          itemDiscount = itemTotal * (item.discountPercentage / 100);
+        }
+        if (item.discountAmount > 0) {
+          itemDiscount += item.discountAmount;
+        }
+        
+        itemDiscounts += itemDiscount;
+      }
+    });
+
+    const subtotalAfterItemDiscounts = subtotal - itemDiscounts;
+    
+    let orderDiscounts = 0;
+    if (orderData.orderDiscountPercentage > 0) {
+      orderDiscounts = subtotalAfterItemDiscounts * (orderData.orderDiscountPercentage / 100);
+    }
+    if (orderData.orderDiscountAmount > 0) {
+      orderDiscounts += orderData.orderDiscountAmount;
+    }
+
+    return {
+      subtotal: Math.round(subtotal * 100) / 100,
+      itemDiscounts: Math.round(itemDiscounts * 100) / 100,
+      subtotalAfterItemDiscounts: Math.round(subtotalAfterItemDiscounts * 100) / 100,
+      orderDiscounts: Math.round(orderDiscounts * 100) / 100,
+      finalTotal: Math.round((subtotalAfterItemDiscounts - orderDiscounts) * 100) / 100,
+    };
+  };
 
   if (ordersLoading || itemsLoading) {
     return (
@@ -341,7 +387,7 @@ export default function DailyOrders() {
       {/* Header */}
       <div>
         <h2 className="text-2xl font-bold text-foreground">Daily Orders</h2>
-        <p className="text-muted-foreground">Multi-item order management</p>
+        <p className="text-muted-foreground">Multi-item order management with full order discounts</p>
       </div>
 
       {/* Order Entry Form */}
@@ -383,6 +429,8 @@ export default function DailyOrders() {
                         <Input 
                           placeholder="Auto-generated"
                           data-testid="input-order-number"
+                          readOnly
+                          className="bg-muted/50"
                           {...field} 
                         />
                       </FormControl>
@@ -475,9 +523,9 @@ export default function DailyOrders() {
                               step="0.01"
                               min="0"
                               value={item.price}
-                              onChange={(e) => updateOrderItem(index, 'price', Number(e.target.value))}
+                              readOnly
+                              className="w-24 bg-muted/50"
                               data-testid={`input-price-${index}`}
-                              className="w-24"
                             />
                           </TableCell>
                           <TableCell>
@@ -525,15 +573,55 @@ export default function DailyOrders() {
                 </div>
               </div>
 
+              {/* Order-Level Discounts */}
+              <div className="p-4 bg-muted/30 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">Order Discount</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <Label>Order Discount Amount</Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      value={orderDiscountAmount}
+                      onChange={(e) => setOrderDiscountAmount(Number(e.target.value) || 0)}
+                      placeholder="0.00"
+                      data-testid="input-order-discount-amount"
+                    />
+                  </div>
+                  <div>
+                    <Label>Order Discount %</Label>
+                    <Input
+                      type="number"
+                      step="0.1"
+                      min="0"
+                      max="100"
+                      value={orderDiscountPercentage}
+                      onChange={(e) => setOrderDiscountPercentage(Number(e.target.value) || 0)}
+                      placeholder="0"
+                      data-testid="input-order-discount-percentage"
+                    />
+                  </div>
+                </div>
+              </div>
+
               {/* Order Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
                   <Label>Subtotal</Label>
                   <div className="text-lg font-medium">${orderSummary.subtotal.toFixed(2)}</div>
                 </div>
                 <div>
-                  <Label>Total Discount</Label>
-                  <div className="text-lg font-medium text-red-600">-${orderSummary.totalDiscount.toFixed(2)}</div>
+                  <Label>Item Discounts</Label>
+                  <div className="text-lg font-medium text-red-600">-${orderSummary.itemDiscounts.toFixed(2)}</div>
+                </div>
+                <div>
+                  <Label>After Item Discounts</Label>
+                  <div className="text-lg font-medium">${orderSummary.subtotalAfterItemDiscounts.toFixed(2)}</div>
+                </div>
+                <div>
+                  <Label>Order Discounts</Label>
+                  <div className="text-lg font-medium text-red-600">-${orderSummary.orderDiscounts.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>Final Order Total</Label>
@@ -602,120 +690,166 @@ export default function DailyOrders() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
-              {filteredOrders.map((order) => (
-                <Collapsible 
-                  key={order.id}
-                  open={expandedOrders.has(order.id)}
-                  onOpenChange={(open) => {
-                    const newExpanded = new Set(expandedOrders);
-                    if (open) {
-                      newExpanded.add(order.id);
-                    } else {
-                      newExpanded.delete(order.id);
-                    }
-                    setExpandedOrders(newExpanded);
-                  }}
-                >
-                  <Card>
-                    <CollapsibleTrigger asChild>
-                      <CardHeader className="cursor-pointer hover:bg-muted/50">
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center space-x-4">
-                            {expandedOrders.has(order.id) ? (
-                              <ChevronDown className="h-4 w-4" />
-                            ) : (
-                              <ChevronRight className="h-4 w-4" />
-                            )}
-                            <div>
-                              <h4 className="font-semibold">{order.orderNumber}</h4>
-                              <p className="text-sm text-muted-foreground">{order.customerName}</p>
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-4">
-                            <div className="text-right">
-                              <p className="font-medium">${order.totalAmount}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
-                                 order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
-                              </p>
-                            </div>
-                            <Badge variant={getStatusColor(order.status)}>
-                              {order.status}
-                            </Badge>
-                            <div className="flex space-x-2">
-                              <Select
-                                value={order.status}
-                                onValueChange={(status) => 
-                                  updateOrderStatusMutation.mutate({ orderId: order.id, status })
-                                }
-                              >
-                                <SelectTrigger className="w-32">
-                                  <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="pending">Pending</SelectItem>
-                                  <SelectItem value="completed">Completed</SelectItem>
-                                  <SelectItem value="cancelled">Cancelled</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deleteOrderMutation.mutate(order.id);
-                                }}
-                                disabled={deleteOrderMutation.isPending}
-                                data-testid={`button-delete-order-${order.id}`}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      </CardHeader>
-                    </CollapsibleTrigger>
-                    <CollapsibleContent>
-                      <CardContent>
-                        <h5 className="font-medium mb-2">Order Items:</h5>
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Item</TableHead>
-                              <TableHead>Quantity</TableHead>
-                              <TableHead>Price</TableHead>
-                              <TableHead>Discount</TableHead>
-                              <TableHead>Total</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {parseOrderItems(order.items).map((item: any, index: number) => (
-                              <TableRow key={index}>
-                                <TableCell>{item.name}</TableCell>
-                                <TableCell>{item.quantity}</TableCell>
-                                <TableCell>${item.price}</TableCell>
-                                <TableCell>
-                                  {item.discountAmount > 0 && `TK ${item.discountAmount}`}
-                                  {item.discountPercentage > 0 && `${item.discountPercentage}%`}
-                                  {!item.discountAmount && !item.discountPercentage && "None"}
-                                </TableCell>
-                                <TableCell>
-                                  ${((item.quantity * item.price) - (item.discountAmount || 0) - (item.quantity * item.price * (item.discountPercentage || 0) / 100)).toFixed(2)}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </CardContent>
-                    </CollapsibleContent>
-                  </Card>
-                </Collapsible>
-              ))}
-            </div>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Order Number</TableHead>
+                  <TableHead>Customer Name</TableHead>
+                  <TableHead>Order Date</TableHead>
+                  <TableHead>Final Total</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredOrders.map((order) => (
+                  <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
+                    <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                    <TableCell>{order.customerName}</TableCell>
+                    <TableCell>
+                      {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
+                       order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
+                    </TableCell>
+                    <TableCell className="font-medium">${order.totalAmount}</TableCell>
+                    <TableCell>
+                      <div className="flex space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setViewOrderModal(order)}
+                          data-testid={`button-view-order-${order.id}`}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => deleteOrderMutation.mutate(order.id)}
+                          disabled={deleteOrderMutation.isPending}
+                          data-testid={`button-delete-order-${order.id}`}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           )}
         </CardContent>
       </Card>
+
+      {/* View Order Modal */}
+      <Dialog open={!!viewOrderModal} onOpenChange={() => setViewOrderModal(null)}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Order Details</DialogTitle>
+            <DialogDescription>
+              Complete order information and breakdown
+            </DialogDescription>
+          </DialogHeader>
+          {viewOrderModal && (
+            <div className="space-y-6">
+              {/* Order Header */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
+                <div>
+                  <Label>Customer Name</Label>
+                  <div className="font-medium">{viewOrderModal.customerName}</div>
+                </div>
+                <div>
+                  <Label>Order Number</Label>
+                  <div className="font-medium">{viewOrderModal.orderNumber}</div>
+                </div>
+                <div>
+                  <Label>Order Date</Label>
+                  <div className="font-medium">
+                    {viewOrderModal.orderDate ? new Date(viewOrderModal.orderDate).toLocaleDateString() :
+                     viewOrderModal.createdAt ? new Date(viewOrderModal.createdAt).toLocaleDateString() : 'N/A'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Order Items */}
+              <div>
+                <h3 className="text-lg font-semibold mb-4">Order Items</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Quantity</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>Discounts</TableHead>
+                      <TableHead>Row Total</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {parseOrderData(viewOrderModal.items).items.map((item: any, index: number) => (
+                      <TableRow key={index}>
+                        <TableCell>{item.name}</TableCell>
+                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>${item.price}</TableCell>
+                        <TableCell>
+                          {item.discountAmount > 0 && `TK ${item.discountAmount}`}
+                          {item.discountAmount > 0 && item.discountPercentage > 0 && " + "}
+                          {item.discountPercentage > 0 && `${item.discountPercentage}%`}
+                          {!item.discountAmount && !item.discountPercentage && "None"}
+                        </TableCell>
+                        <TableCell>
+                          ${((item.quantity * item.price) - 
+                            (item.discountAmount || 0) - 
+                            (item.quantity * item.price * (item.discountPercentage || 0) / 100)).toFixed(2)}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Order Summary */}
+              <div className="p-4 bg-muted/50 rounded-lg">
+                <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
+                {(() => {
+                  const totals = calculateOrderTotal(viewOrderModal.items);
+                  const orderData = parseOrderData(viewOrderModal.items);
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                      <div>
+                        <Label>Subtotal</Label>
+                        <div className="text-lg font-medium">${totals.subtotal.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <Label>Item Discounts</Label>
+                        <div className="text-lg font-medium text-red-600">-${totals.itemDiscounts.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <Label>After Item Discounts</Label>
+                        <div className="text-lg font-medium">${totals.subtotalAfterItemDiscounts.toFixed(2)}</div>
+                      </div>
+                      <div>
+                        <Label>Order Discounts</Label>
+                        <div className="text-lg font-medium text-red-600">
+                          -${totals.orderDiscounts.toFixed(2)}
+                          {(orderData.orderDiscountAmount > 0 || orderData.orderDiscountPercentage > 0) && (
+                            <div className="text-sm text-muted-foreground">
+                              {orderData.orderDiscountAmount > 0 && `TK ${orderData.orderDiscountAmount}`}
+                              {orderData.orderDiscountAmount > 0 && orderData.orderDiscountPercentage > 0 && " + "}
+                              {orderData.orderDiscountPercentage > 0 && `${orderData.orderDiscountPercentage}%`}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div>
+                        <Label>Final Total</Label>
+                        <div className="text-xl font-bold">${totals.finalTotal.toFixed(2)}</div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
