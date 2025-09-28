@@ -150,38 +150,75 @@ export default function ExpenseManagement() {
     },
   });
 
-  // Import expenses mutation
+  // Import expenses mutation with batch processing
   const importExpensesMutation = useMutation({
     mutationFn: async () => {
-      const promises = importData.map(expense => {
-        const expenseData: InsertExpense = {
-          date: expense.Date,
-          personItem: expense["Person/Item"],
-          category: expense.Category,
-          weight: expense.Weight || null,
-          qty: parseInt(expense.Qty) || 1,
-          amount: expense.Amount,
-          dueAmount: expense["Due Amount"] || null,
-          comment: expense.Comment || null,
-        };
-        return apiRequest("POST", "/api/expenses", expenseData);
-      });
-      return Promise.all(promises);
+      const BATCH_SIZE = 10; // Process 10 expenses at a time
+      const results = [];
+      let successCount = 0;
+      let errorCount = 0;
+
+      // Process in batches
+      for (let i = 0; i < importData.length; i += BATCH_SIZE) {
+        const batch = importData.slice(i, i + BATCH_SIZE);
+        const batchPromises = batch.map(async (expense, index) => {
+          try {
+            const expenseData: InsertExpense = {
+              date: expense.Date,
+              personItem: expense["Person/Item"],
+              category: expense.Category,
+              weight: expense.Weight || null,
+              qty: parseInt(expense.Qty) || 1,
+              amount: expense.Amount,
+              dueAmount: expense["Due Amount"] || null,
+              comment: expense.Comment || null,
+            };
+            
+            const result = await apiRequest("POST", "/api/expenses", expenseData);
+            successCount++;
+            return { success: true, index: i + index, result };
+          } catch (error) {
+            errorCount++;
+            console.error(`Failed to import expense at row ${i + index + 2}:`, error);
+            return { success: false, index: i + index, error };
+          }
+        });
+
+        const batchResults = await Promise.allSettled(batchPromises);
+        results.push(...batchResults);
+
+        // Small delay between batches to prevent overwhelming the server
+        if (i + BATCH_SIZE < importData.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+
+      return { successCount, errorCount, totalCount: importData.length };
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/expenses"] });
       setImportModal(false);
       setImportData([]);
       setImportErrors([]);
-      toast({
-        title: "Import successful",
-        description: `Successfully imported ${importData.length} expenses.`,
-      });
+      
+      if (result.errorCount > 0) {
+        toast({
+          title: "Import completed with errors",
+          description: `Successfully imported ${result.successCount} out of ${result.totalCount} expenses. ${result.errorCount} failed.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Import successful",
+          description: `Successfully imported all ${result.successCount} expenses.`,
+        });
+      }
     },
-    onError: () => {
+    onError: (error) => {
+      console.error("Import error:", error);
       toast({
         title: "Import failed",
-        description: "Failed to import expenses. Please try again.",
+        description: "Failed to import expenses. Please check your CSV format and try again.",
         variant: "destructive",
       });
     },
@@ -288,40 +325,112 @@ export default function ExpenseManagement() {
     });
   };
 
-  // CSV Import
+  // Improved CSV parsing function
+  const parseCSVLine = (line: string): string[] => {
+    const result = [];
+    let current = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      
+      if (char === '"') {
+        if (inQuotes && line[i + 1] === '"') {
+          // Handle escaped quotes
+          current += '"';
+          i++; // Skip the next quote
+        } else {
+          inQuotes = !inQuotes;
+        }
+      } else if (char === ',' && !inQuotes) {
+        result.push(current.trim());
+        current = '';
+      } else {
+        current += char;
+      }
+    }
+    
+    result.push(current.trim());
+    return result;
+  };
+
+  // CSV Import with improved parsing
   const handleImport = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
     const reader = new FileReader();
     reader.onload = (e) => {
-      const csv = e.target?.result as string;
-      const lines = csv.split("\n").filter(line => line.trim());
-      const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
-      
-      const requiredHeaders = ["Date", "Person/Item", "Category", "Qty", "Amount"];
-      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
-      
-      if (missingHeaders.length > 0) {
-        setImportErrors([`Missing required columns: ${missingHeaders.join(", ")}`]);
+      try {
+        const csv = e.target?.result as string;
+        const lines = csv.split(/\r?\n/).filter(line => line.trim());
+        
+        if (lines.length === 0) {
+          setImportErrors(["CSV file is empty"]);
+          setImportModal(true);
+          return;
+        }
+
+        const headers = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, "").trim());
+        
+        const requiredHeaders = ["Date", "Person/Item", "Category", "Qty", "Amount"];
+        const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+        
+        if (missingHeaders.length > 0) {
+          setImportErrors([`Missing required columns: ${missingHeaders.join(", ")}`]);
+          setImportModal(true);
+          return;
+        }
+
+        const errors: string[] = [];
+        const data = lines.slice(1).map((line, index) => {
+          try {
+            const values = parseCSVLine(line).map(v => v.replace(/^"|"$/g, "").trim());
+            const row: any = {};
+            
+            headers.forEach((header, i) => {
+              row[header] = values[i] || "";
+            });
+
+            // Validate required fields
+            if (!row.Date || !row["Person/Item"] || !row.Category || !row.Amount) {
+              errors.push(`Row ${index + 2}: Missing required data`);
+            }
+
+            // Validate date format
+            if (row.Date && isNaN(Date.parse(row.Date))) {
+              errors.push(`Row ${index + 2}: Invalid date format`);
+            }
+
+            // Validate amount is numeric
+            if (row.Amount && isNaN(parseFloat(row.Amount))) {
+              errors.push(`Row ${index + 2}: Amount must be a number`);
+            }
+
+            return row;
+          } catch (error) {
+            errors.push(`Row ${index + 2}: Error parsing line`);
+            return null;
+          }
+        }).filter(row => row !== null);
+
+        if (errors.length > 10) {
+          setImportErrors([`Too many errors in CSV file (${errors.length} errors). Please check your file format.`, ...errors.slice(0, 10), "... and more"]);
+        } else if (errors.length > 0) {
+          setImportErrors(errors);
+        } else {
+          setImportErrors([]);
+        }
+
+        setImportData(data);
         setImportModal(true);
-        return;
+      } catch (error) {
+        console.error("CSV parsing error:", error);
+        setImportErrors(["Failed to parse CSV file. Please check the file format."]);
+        setImportModal(true);
       }
-
-      const data = lines.slice(1).map((line, index) => {
-        const values = line.split(",").map(v => v.replace(/"/g, "").trim());
-        const row: any = {};
-        headers.forEach((header, i) => {
-          row[header] = values[i] || "";
-        });
-        return row;
-      });
-
-      setImportData(data);
-      setImportErrors([]);
-      setImportModal(true);
     };
-    reader.readAsText(file);
+    reader.readAsText(file, 'UTF-8');
   };
 
   // Calculate total amounts
