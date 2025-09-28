@@ -296,7 +296,7 @@ export default function DailyOrders() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {items.filter(item => item.isActive === "true").map((item) => (
+                          {items.filter(item => item.isActive).map((item) => (
                             <SelectItem key={item.id} value={item.id}>
                               {item.name} - ${item.price}
                             </SelectItem>
