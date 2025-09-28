@@ -2,7 +2,7 @@
 
 ## Overview
 
-FishFire Management System is a full-stack web application designed for restaurant or food service management. It provides a comprehensive dashboard for managing daily orders, inventory items, and business operations. The system features a modern React frontend with a clean, professional UI built using shadcn/ui components, backed by a Node.js/Express server with PostgreSQL database integration.
+FishFire Management System is a full-stack web application designed for restaurant or food service management. It provides a comprehensive dashboard for managing daily orders, inventory items, expense tracking, stock reconciliation, and business operations. The system features a modern React frontend with a clean, professional UI built using shadcn/ui components, backed by a Node.js/Express server with PostgreSQL database integration.
 
 ## User Preferences
 
@@ -21,7 +21,7 @@ The client-side application is built with React using TypeScript and follows a m
 - **Forms**: React Hook Form with Zod validation for robust form handling
 - **Build Tool**: Vite for fast development and optimized production builds
 
-The frontend implements a dashboard layout with a collapsible sidebar navigation, protected routes requiring authentication, and dedicated pages for dashboard overview, daily orders management, and item management.
+The frontend implements a dashboard layout with a collapsible sidebar navigation, protected routes requiring authentication, and dedicated pages for dashboard overview, daily orders management, item management, order management, expense management, and daily stock reconciliation.
 
 ### Backend Architecture
 The server-side follows a RESTful API architecture with Express.js:
@@ -33,7 +33,7 @@ The server-side follows a RESTful API architecture with Express.js:
 - **Validation**: Zod schemas shared between frontend and backend
 - **Storage Abstraction**: Interface-based storage layer supporting both memory and database implementations
 
-The backend provides REST endpoints for user authentication, order management, and item management, with all routes protected by authentication middleware.
+The backend provides REST endpoints for user authentication, order management, item management, expense management, and stock reconciliation, with all routes protected by authentication middleware.
 
 ### Data Storage
 The application uses PostgreSQL as the primary database with Drizzle ORM:
@@ -44,7 +44,7 @@ The application uses PostgreSQL as the primary database with Drizzle ORM:
 - **Migrations**: Drizzle Kit for database migrations and schema management
 - **Session Store**: PostgreSQL-based session storage using connect-pg-simple
 
-The database schema includes tables for users, orders, and items with proper relationships and constraints.
+The database schema includes tables for users, orders, items, expenses, opening stock, and closing stock with proper relationships and constraints.
 
 ### Authentication & Authorization
 Session-based authentication system with secure password handling:
@@ -99,3 +99,15 @@ The application is configured for modern development workflows:
 - **date-fns**: Date manipulation library for handling timestamps
 - **nanoid**: URL-safe unique string ID generator
 - **cmdk**: Command palette component for enhanced user interactions
+
+## Recent Changes
+
+### September 28, 2025 - Daily Stock Reconciliation System
+- Implemented comprehensive Daily Stock Reconciliation module with opening and closing stock entry
+- Added auto-calculation of actual vs expected usage with unit-aware calculations for PCS and KG items
+- Integrated color-coded reporting table (green for matches, red for mismatches) with mismatch alerts
+- Built CSV export functionality for daily stock reports with complete reconciliation data
+- Enhanced order consumption logic to properly handle both PCS-based and KG-based item sales
+- Added proper unit conversions ensuring actual and expected usage are comparable across item types
+- Completed full CRUD operations with PostgreSQL storage for opening and closing stock data
+- Integrated navigation and routing for seamless access to stock reconciliation features
