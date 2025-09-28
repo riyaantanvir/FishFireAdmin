@@ -74,7 +74,7 @@ export default function DailyOrders() {
   const [orderItems, setOrderItems] = useState<OrderItem[]>([{
     itemId: "",
     name: "",
-    quantity: 1,
+    liveWeight: 1,
     price: 0,
     itemSaleType: "",
     weightPerPCS: 0,
@@ -113,15 +113,15 @@ export default function DailyOrders() {
 
     // Calculate item-level totals and discounts
     orderItems.forEach(item => {
-      if (item.quantity && item.price) {
+      if (item.liveWeight && item.price) {
         // Calculate base item total based on sale type
         let itemTotal = 0;
         if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-          // For Per PCS: Total = (Quantity * WeightPerPCS) * PricePerKG
-          itemTotal = (item.quantity * item.weightPerPCS) * item.price;
+          // For Per PCS: Total = (LiveWeight in PCS * WeightPerPCS) * PricePerKG
+          itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
         } else {
-          // For Per KG: Total = Quantity * PricePerKG
-          itemTotal = item.quantity * item.price;
+          // For Per KG: Total = LiveWeight in KG * PricePerKG
+          itemTotal = item.liveWeight * item.price;
         }
         
         subtotal += itemTotal;
@@ -171,7 +171,7 @@ export default function DailyOrders() {
     setOrderItems([...orderItems, {
       itemId: "",
       name: "",
-      quantity: 1,
+      liveWeight: 1,
       price: 0,
       itemSaleType: "",
       weightPerPCS: 0,
@@ -210,16 +210,16 @@ export default function DailyOrders() {
 
   // Calculate row total
   const getRowTotal = (item: OrderItem) => {
-    if (!item.quantity || !item.price) return 0;
+    if (!item.liveWeight || !item.price) return 0;
     
     // Calculate base total based on sale type
     let total = 0;
     if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-      // For Per PCS: Total = (Quantity * WeightPerPCS) * PricePerKG
-      total = (item.quantity * item.weightPerPCS) * item.price;
+      // For Per PCS: Total = (LiveWeight in PCS * WeightPerPCS) * PricePerKG
+      total = (item.liveWeight * item.weightPerPCS) * item.price;
     } else {
-      // For Per KG: Total = Quantity * PricePerKG
-      total = item.quantity * item.price;
+      // For Per KG: Total = LiveWeight in KG * PricePerKG
+      total = item.liveWeight * item.price;
     }
     
     // Apply percentage discount first
@@ -271,8 +271,10 @@ export default function DailyOrders() {
       setOrderItems([{
         itemId: "",
         name: "",
-        quantity: 1,
+        liveWeight: 1,
         price: 0,
+        itemSaleType: "",
+        weightPerPCS: 0,
         discountAmount: 0,
         discountPercentage: 0,
       }]);
@@ -364,8 +366,14 @@ export default function DailyOrders() {
     let itemDiscounts = 0;
 
     orderData.items.forEach((item: any) => {
-      if (item.quantity && item.price) {
-        const itemTotal = item.quantity * item.price;
+      if (item.liveWeight && item.price) {
+        // Calculate total based on sale type
+        let itemTotal = 0;
+        if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+          itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+        } else {
+          itemTotal = item.liveWeight * item.price;
+        }
         subtotal += itemTotal;
 
         let itemDiscount = 0;
@@ -507,7 +515,7 @@ export default function DailyOrders() {
                         <TableHead>Item</TableHead>
                         <TableHead>Sale Type</TableHead>
                         <TableHead>Weight/PCS</TableHead>
-                        <TableHead>Quantity</TableHead>
+                        <TableHead>Live Weight</TableHead>
                         <TableHead>Price/KG</TableHead>
                         <TableHead>Discount Amount</TableHead>
                         <TableHead>Discount %</TableHead>
@@ -555,16 +563,23 @@ export default function DailyOrders() {
                             )}
                           </TableCell>
                           
-                          {/* Quantity */}
+                          {/* Live Weight */}
                           <TableCell>
-                            <Input
-                              type="number"
-                              min="1"
-                              value={item.quantity}
-                              onChange={(e) => updateOrderItem(index, 'quantity', Number(e.target.value))}
-                              data-testid={`input-quantity-${index}`}
-                              className="w-20"
-                            />
+                            <div className="space-y-1">
+                              <Input
+                                type="number"
+                                step="0.01"
+                                min="0.01"
+                                value={item.liveWeight}
+                                onChange={(e) => updateOrderItem(index, 'liveWeight', Number(e.target.value))}
+                                data-testid={`input-live-weight-${index}`}
+                                className="w-20"
+                                placeholder="0.00"
+                              />
+                              <div className="text-xs text-muted-foreground text-center">
+                                {item.itemSaleType === "Per PCS" ? "PCS" : "KG"}
+                              </div>
+                            </div>
                           </TableCell>
                           
                           {/* Price per KG */}
@@ -835,8 +850,8 @@ export default function DailyOrders() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Item</TableHead>
-                      <TableHead>Quantity</TableHead>
-                      <TableHead>Price</TableHead>
+                      <TableHead>Live Weight</TableHead>
+                      <TableHead>Price/KG</TableHead>
                       <TableHead>Discounts</TableHead>
                       <TableHead>Row Total</TableHead>
                     </TableRow>
@@ -845,7 +860,9 @@ export default function DailyOrders() {
                     {parseOrderData(viewOrderModal.items).items.map((item: any, index: number) => (
                       <TableRow key={index}>
                         <TableCell>{item.name}</TableCell>
-                        <TableCell>{item.quantity}</TableCell>
+                        <TableCell>
+                          {(item.liveWeight || item.quantity || 0).toFixed(2)} {item.itemSaleType === "Per PCS" ? "PCS" : "KG"}
+                        </TableCell>
                         <TableCell>${item.price}</TableCell>
                         <TableCell>
                           {item.discountAmount > 0 && `TK ${item.discountAmount}`}
@@ -854,9 +871,26 @@ export default function DailyOrders() {
                           {!item.discountAmount && !item.discountPercentage && "None"}
                         </TableCell>
                         <TableCell>
-                          ${((item.quantity * item.price) - 
-                            (item.discountAmount || 0) - 
-                            (item.quantity * item.price * (item.discountPercentage || 0) / 100)).toFixed(2)}
+                          ${(() => {
+                            const weight = item.liveWeight || item.quantity || 0;
+                            let baseTotal = 0;
+                            if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+                              baseTotal = (weight * item.weightPerPCS) * item.price;
+                            } else {
+                              baseTotal = weight * item.price;
+                            }
+                            
+                            // Apply discounts
+                            let total = baseTotal;
+                            if (item.discountPercentage > 0) {
+                              total = total * (1 - item.discountPercentage / 100);
+                            }
+                            if (item.discountAmount > 0) {
+                              total = Math.max(0, total - item.discountAmount);
+                            }
+                            
+                            return total.toFixed(2);
+                          })()}
                         </TableCell>
                       </TableRow>
                     ))}
