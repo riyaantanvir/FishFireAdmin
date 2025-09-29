@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock, type Payment, type InsertPayment, type ItemType, type InsertItemType, type ExpenseCategory, type InsertExpenseCategory } from "@shared/schema";
+import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock, type Payment, type InsertPayment, type ItemType, type InsertItemType, type ExpenseCategory, type InsertExpenseCategory, type Role, type InsertRole, type Permission, type InsertPermission, type RolePermission, type InsertRolePermission, type UserRole, type InsertUserRole, type AuditLog, type InsertAuditLog } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -60,6 +60,43 @@ export interface IStorage {
   updateExpenseCategory(id: string, expenseCategory: Partial<ExpenseCategory>): Promise<ExpenseCategory | undefined>;
   deleteExpenseCategory(id: string): Promise<boolean>;
   
+  // User Management (Enhanced)
+  getAllUsers(): Promise<User[]>;
+  updateUser(id: string, user: Partial<User>): Promise<User | undefined>;
+  deleteUser(id: string): Promise<boolean>;
+  updateUserLastLogin(id: string): Promise<void>;
+  
+  // Role Management
+  getRoles(): Promise<Role[]>;
+  getRole(id: string): Promise<Role | undefined>;
+  getRoleByName(name: string): Promise<Role | undefined>;
+  createRole(role: InsertRole): Promise<Role>;
+  updateRole(id: string, role: Partial<Role>): Promise<Role | undefined>;
+  deleteRole(id: string): Promise<boolean>;
+  
+  // Permission Management
+  getPermissions(): Promise<Permission[]>;
+  getPermission(id: string): Promise<Permission | undefined>;
+  getPermissionByName(name: string): Promise<Permission | undefined>;
+  createPermission(permission: InsertPermission): Promise<Permission>;
+  updatePermission(id: string, permission: Partial<Permission>): Promise<Permission | undefined>;
+  deletePermission(id: string): Promise<boolean>;
+  
+  // Role-Permission Management
+  getRolePermissions(roleId: string): Promise<RolePermission[]>;
+  assignPermissionToRole(rolePermission: InsertRolePermission): Promise<RolePermission>;
+  removePermissionFromRole(roleId: string, permissionId: string): Promise<boolean>;
+  
+  // User-Role Management
+  getUserRoles(userId: string): Promise<UserRole[]>;
+  assignRoleToUser(userRole: InsertUserRole): Promise<UserRole>;
+  removeRoleFromUser(userId: string, roleId: string): Promise<boolean>;
+  getUserPermissions(userId: string): Promise<Permission[]>;
+  
+  // Audit Logging
+  getAuditLogs(filters?: { userId?: string; action?: string; resource?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }>;
+  createAuditLog(auditLog: InsertAuditLog): Promise<AuditLog>;
+  
   sessionStore: session.Store;
 }
 
@@ -73,6 +110,14 @@ export class MemStorage implements IStorage {
   private payments: Map<string, Payment>;
   private itemTypes: Map<string, ItemType>;
   private expenseCategories: Map<string, ExpenseCategory>;
+  
+  // RBAC Data Structures
+  private roles: Map<string, Role>;
+  private permissions: Map<string, Permission>;
+  private rolePermissions: Map<string, RolePermission>;
+  private userRoles: Map<string, UserRole>;
+  private auditLogs: Map<string, AuditLog>;
+  
   public sessionStore: session.Store;
 
   constructor() {
@@ -86,13 +131,112 @@ export class MemStorage implements IStorage {
     this.itemTypes = new Map();
     this.expenseCategories = new Map();
     
+    // Initialize RBAC Maps
+    this.roles = new Map();
+    this.permissions = new Map();
+    this.rolePermissions = new Map();
+    this.userRoles = new Map();
+    this.auditLogs = new Map();
+    
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
       ttl: 86400000, // 24 hours TTL
     });
     
-    // Create default admin user immediately - no async needed
+    // Initialize default data
+    this.initializeDefaultRBACData();
     this.createDefaultAdminSync();
+  }
+
+  private initializeDefaultRBACData() {
+    // Create default roles
+    const defaultRoles = [
+      { name: "Admin", description: "Full system access" },
+      { name: "Manager", description: "Management level access" },
+      { name: "Cashier", description: "Point of sale operations" },
+      { name: "Kitchen", description: "Kitchen operations access" },
+      { name: "Staff", description: "Basic staff access" }
+    ];
+
+    // Create default permissions
+    const defaultPermissions = [
+      { name: "view:orders", resource: "orders", action: "view", description: "View orders" },
+      { name: "create:orders", resource: "orders", action: "create", description: "Create orders" },
+      { name: "edit:orders", resource: "orders", action: "edit", description: "Edit orders" },
+      { name: "delete:orders", resource: "orders", action: "delete", description: "Delete orders" },
+      { name: "export:orders", resource: "orders", action: "export", description: "Export orders" },
+      
+      { name: "view:items", resource: "items", action: "view", description: "View items" },
+      { name: "create:items", resource: "items", action: "create", description: "Create items" },
+      { name: "edit:items", resource: "items", action: "edit", description: "Edit items" },
+      { name: "delete:items", resource: "items", action: "delete", description: "Delete items" },
+      { name: "export:items", resource: "items", action: "export", description: "Export items" },
+      
+      { name: "view:expenses", resource: "expenses", action: "view", description: "View expenses" },
+      { name: "create:expenses", resource: "expenses", action: "create", description: "Create expenses" },
+      { name: "edit:expenses", resource: "expenses", action: "edit", description: "Edit expenses" },
+      { name: "delete:expenses", resource: "expenses", action: "delete", description: "Delete expenses" },
+      { name: "export:expenses", resource: "expenses", action: "export", description: "Export expenses" },
+      
+      { name: "view:users", resource: "users", action: "view", description: "View users" },
+      { name: "create:users", resource: "users", action: "create", description: "Create users" },
+      { name: "edit:users", resource: "users", action: "edit", description: "Edit users" },
+      { name: "delete:users", resource: "users", action: "delete", description: "Delete users" },
+      
+      { name: "view:roles", resource: "roles", action: "view", description: "View roles" },
+      { name: "create:roles", resource: "roles", action: "create", description: "Create roles" },
+      { name: "edit:roles", resource: "roles", action: "edit", description: "Edit roles" },
+      { name: "delete:roles", resource: "roles", action: "delete", description: "Delete roles" },
+      
+      { name: "view:reports", resource: "reports", action: "view", description: "View reports" },
+      { name: "export:reports", resource: "reports", action: "export", description: "Export reports" },
+      
+      { name: "view:stock", resource: "stock", action: "view", description: "View stock" },
+      { name: "create:stock", resource: "stock", action: "create", description: "Create stock entries" },
+      { name: "edit:stock", resource: "stock", action: "edit", description: "Edit stock entries" }
+    ];
+
+    // Create roles
+    defaultRoles.forEach(roleData => {
+      const id = randomUUID();
+      const role: Role = {
+        id,
+        name: roleData.name,
+        description: roleData.description,
+        isActive: true,
+        createdAt: new Date()
+      };
+      this.roles.set(id, role);
+    });
+
+    // Create permissions
+    defaultPermissions.forEach(permData => {
+      const id = randomUUID();
+      const permission: Permission = {
+        id,
+        name: permData.name,
+        resource: permData.resource,
+        action: permData.action,
+        description: permData.description,
+        createdAt: new Date()
+      };
+      this.permissions.set(id, permission);
+    });
+
+    // Assign permissions to Admin role (all permissions)
+    const adminRole = Array.from(this.roles.values()).find(r => r.name === "Admin");
+    if (adminRole) {
+      Array.from(this.permissions.values()).forEach(permission => {
+        const id = randomUUID();
+        const rolePermission: RolePermission = {
+          id,
+          roleId: adminRole.id,
+          permissionId: permission.id,
+          createdAt: new Date()
+        };
+        this.rolePermissions.set(id, rolePermission);
+      });
+    }
   }
 
   private createDefaultAdminSync() {
@@ -102,9 +246,26 @@ export class MemStorage implements IStorage {
       username: "Admin",
       password: "admin_hashed_password", // We'll handle this specially in auth
       role: "admin",
+      isActive: true,
+      lastLoginAt: null,
       createdAt: new Date(),
     };
     this.users.set(adminUser.id, adminUser);
+
+    // Assign Admin role to the admin user
+    const adminRole = Array.from(this.roles.values()).find(r => r.name === "Admin");
+    if (adminRole) {
+      const userRoleId = randomUUID();
+      const userRole: UserRole = {
+        id: userRoleId,
+        userId: adminUser.id,
+        roleId: adminRole.id,
+        assignedBy: null, // System assigned
+        createdAt: new Date()
+      };
+      this.userRoles.set(userRoleId, userRole);
+    }
+
     console.log(`Created admin user with ID: ${adminUser.id}`);
   }
 
@@ -134,6 +295,8 @@ export class MemStorage implements IStorage {
       ...insertUser, 
       id,
       role: insertUser.role || "user",
+      isActive: insertUser.isActive ?? true,
+      lastLoginAt: null,
       createdAt: new Date(),
     };
     this.users.set(id, user);
@@ -157,6 +320,7 @@ export class MemStorage implements IStorage {
       id,
       status: insertOrder.status || "pending",
       paymentStatus: insertOrder.paymentStatus || "Unpaid",
+      customerName: insertOrder.customerName || null,
       createdAt: new Date(),
     };
     this.orders.set(id, order);
@@ -343,6 +507,7 @@ export class MemStorage implements IStorage {
     const payment: Payment = {
       ...insertPayment,
       id,
+      customerName: insertPayment.customerName || null,
       cash1000: insertPayment.cash1000 || 0,
       cash500: insertPayment.cash500 || 0,
       cash200: insertPayment.cash200 || 0,
@@ -447,6 +612,271 @@ export class MemStorage implements IStorage {
 
   async deleteExpenseCategory(id: string): Promise<boolean> {
     return this.expenseCategories.delete(id);
+  }
+
+  // Enhanced User Management Methods
+  async getAllUsers(): Promise<User[]> {
+    return Array.from(this.users.values()).sort((a, b) => 
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+  }
+
+  async updateUser(id: string, userUpdate: Partial<User>): Promise<User | undefined> {
+    const existingUser = this.users.get(id);
+    if (!existingUser) return undefined;
+    
+    const updatedUser = { ...existingUser, ...userUpdate };
+    this.users.set(id, updatedUser);
+    return updatedUser;
+  }
+
+  async deleteUser(id: string): Promise<boolean> {
+    // Also remove user roles when deleting user
+    const userRolesToDelete = Array.from(this.userRoles.values())
+      .filter(ur => ur.userId === id);
+    userRolesToDelete.forEach(ur => this.userRoles.delete(ur.id));
+    
+    return this.users.delete(id);
+  }
+
+  async updateUserLastLogin(id: string): Promise<void> {
+    const user = this.users.get(id);
+    if (user) {
+      user.lastLoginAt = new Date();
+      this.users.set(id, user);
+    }
+  }
+
+  // Role Management Methods
+  async getRoles(): Promise<Role[]> {
+    return Array.from(this.roles.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getRole(id: string): Promise<Role | undefined> {
+    return this.roles.get(id);
+  }
+
+  async getRoleByName(name: string): Promise<Role | undefined> {
+    return Array.from(this.roles.values()).find(role => role.name === name);
+  }
+
+  async createRole(insertRole: InsertRole): Promise<Role> {
+    const id = randomUUID();
+    const role: Role = {
+      ...insertRole,
+      id,
+      description: insertRole.description || null,
+      isActive: insertRole.isActive ?? true,
+      createdAt: new Date(),
+    };
+    this.roles.set(id, role);
+    return role;
+  }
+
+  async updateRole(id: string, roleUpdate: Partial<Role>): Promise<Role | undefined> {
+    const existingRole = this.roles.get(id);
+    if (!existingRole) return undefined;
+    
+    const updatedRole = { ...existingRole, ...roleUpdate };
+    this.roles.set(id, updatedRole);
+    return updatedRole;
+  }
+
+  async deleteRole(id: string): Promise<boolean> {
+    // Remove role permissions and user roles when deleting role
+    const rolePermissionsToDelete = Array.from(this.rolePermissions.values())
+      .filter(rp => rp.roleId === id);
+    rolePermissionsToDelete.forEach(rp => this.rolePermissions.delete(rp.id));
+    
+    const userRolesToDelete = Array.from(this.userRoles.values())
+      .filter(ur => ur.roleId === id);
+    userRolesToDelete.forEach(ur => this.userRoles.delete(ur.id));
+    
+    return this.roles.delete(id);
+  }
+
+  // Permission Management Methods
+  async getPermissions(): Promise<Permission[]> {
+    return Array.from(this.permissions.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async getPermission(id: string): Promise<Permission | undefined> {
+    return this.permissions.get(id);
+  }
+
+  async getPermissionByName(name: string): Promise<Permission | undefined> {
+    return Array.from(this.permissions.values()).find(permission => permission.name === name);
+  }
+
+  async createPermission(insertPermission: InsertPermission): Promise<Permission> {
+    const id = randomUUID();
+    const permission: Permission = {
+      ...insertPermission,
+      id,
+      description: insertPermission.description || null,
+      createdAt: new Date(),
+    };
+    this.permissions.set(id, permission);
+    return permission;
+  }
+
+  async updatePermission(id: string, permissionUpdate: Partial<Permission>): Promise<Permission | undefined> {
+    const existingPermission = this.permissions.get(id);
+    if (!existingPermission) return undefined;
+    
+    const updatedPermission = { ...existingPermission, ...permissionUpdate };
+    this.permissions.set(id, updatedPermission);
+    return updatedPermission;
+  }
+
+  async deletePermission(id: string): Promise<boolean> {
+    // Remove role permissions when deleting permission
+    const rolePermissionsToDelete = Array.from(this.rolePermissions.values())
+      .filter(rp => rp.permissionId === id);
+    rolePermissionsToDelete.forEach(rp => this.rolePermissions.delete(rp.id));
+    
+    return this.permissions.delete(id);
+  }
+
+  // Role-Permission Management Methods
+  async getRolePermissions(roleId: string): Promise<RolePermission[]> {
+    return Array.from(this.rolePermissions.values()).filter(rp => rp.roleId === roleId);
+  }
+
+  async assignPermissionToRole(insertRolePermission: InsertRolePermission): Promise<RolePermission> {
+    const id = randomUUID();
+    const rolePermission: RolePermission = {
+      ...insertRolePermission,
+      id,
+      createdAt: new Date(),
+    };
+    this.rolePermissions.set(id, rolePermission);
+    return rolePermission;
+  }
+
+  async removePermissionFromRole(roleId: string, permissionId: string): Promise<boolean> {
+    const rolePermission = Array.from(this.rolePermissions.values())
+      .find(rp => rp.roleId === roleId && rp.permissionId === permissionId);
+    
+    if (rolePermission) {
+      return this.rolePermissions.delete(rolePermission.id);
+    }
+    return false;
+  }
+
+  // User-Role Management Methods
+  async getUserRoles(userId: string): Promise<UserRole[]> {
+    return Array.from(this.userRoles.values()).filter(ur => ur.userId === userId);
+  }
+
+  async assignRoleToUser(insertUserRole: InsertUserRole): Promise<UserRole> {
+    const id = randomUUID();
+    const userRole: UserRole = {
+      ...insertUserRole,
+      id,
+      assignedBy: insertUserRole.assignedBy || null,
+      createdAt: new Date(),
+    };
+    this.userRoles.set(id, userRole);
+    return userRole;
+  }
+
+  async removeRoleFromUser(userId: string, roleId: string): Promise<boolean> {
+    const userRole = Array.from(this.userRoles.values())
+      .find(ur => ur.userId === userId && ur.roleId === roleId);
+    
+    if (userRole) {
+      return this.userRoles.delete(userRole.id);
+    }
+    return false;
+  }
+
+  async getUserPermissions(userId: string): Promise<Permission[]> {
+    // Get user roles
+    const userRoles = await this.getUserRoles(userId);
+    const roleIds = userRoles.map(ur => ur.roleId);
+    
+    // Get permissions for those roles
+    const rolePermissions = Array.from(this.rolePermissions.values())
+      .filter(rp => roleIds.includes(rp.roleId));
+    const permissionIds = rolePermissions.map(rp => rp.permissionId);
+    
+    // Return unique permissions
+    const permissions = Array.from(this.permissions.values())
+      .filter(p => permissionIds.includes(p.id));
+    
+    return permissions;
+  }
+
+  // Audit Logging Methods
+  async getAuditLogs(filters?: { 
+    userId?: string; 
+    action?: string; 
+    resource?: string; 
+    dateFrom?: string; 
+    dateTo?: string; 
+    limit?: number; 
+    offset?: number 
+  }): Promise<{ logs: AuditLog[]; total: number }> {
+    let logs = Array.from(this.auditLogs.values());
+    
+    // Apply filters
+    if (filters?.userId) {
+      logs = logs.filter(log => log.userId === filters.userId);
+    }
+    if (filters?.action) {
+      logs = logs.filter(log => log.action === filters.action);
+    }
+    if (filters?.resource) {
+      logs = logs.filter(log => log.resource === filters.resource);
+    }
+    if (filters?.dateFrom) {
+      logs = logs.filter(log => 
+        log.createdAt && log.createdAt >= new Date(filters.dateFrom!)
+      );
+    }
+    if (filters?.dateTo) {
+      logs = logs.filter(log => 
+        log.createdAt && log.createdAt <= new Date(filters.dateTo!)
+      );
+    }
+    
+    // Sort by creation date (newest first)
+    logs.sort((a, b) => 
+      new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+    );
+    
+    const total = logs.length;
+    
+    // Apply pagination
+    if (filters?.offset || filters?.limit) {
+      const offset = filters.offset || 0;
+      const limit = filters.limit || 50;
+      logs = logs.slice(offset, offset + limit);
+    }
+    
+    return { logs, total };
+  }
+
+  async createAuditLog(insertAuditLog: InsertAuditLog): Promise<AuditLog> {
+    const id = randomUUID();
+    const auditLog: AuditLog = {
+      ...insertAuditLog,
+      id,
+      userId: insertAuditLog.userId || null,
+      resourceId: insertAuditLog.resourceId || null,
+      oldData: insertAuditLog.oldData || null,
+      newData: insertAuditLog.newData || null,
+      metadata: insertAuditLog.metadata || null,
+      ipAddress: insertAuditLog.ipAddress || null,
+      userAgent: insertAuditLog.userAgent || null,
+      errorMessage: insertAuditLog.errorMessage || null,
+      actorName: insertAuditLog.actorName || null,
+      success: insertAuditLog.success ?? true,
+      createdAt: new Date(),
+    };
+    this.auditLogs.set(id, auditLog);
+    return auditLog;
   }
 }
 
