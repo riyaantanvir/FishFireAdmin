@@ -19,7 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Item } from "@shared/schema";
+import type { Item, ItemType } from "@shared/schema";
 import { z } from "zod";
 import {
   Dialog,
@@ -33,9 +33,7 @@ import {
 const itemFormSchema = z.object({
   date: z.string().min(1, "Date is required"),
   name: z.string().min(1, "Item name is required"),
-  itemType: z.enum(["Fish", "Non-Fish", "Drinks", "Other"], {
-    required_error: "Please select an item type",
-  }),
+  itemType: z.string().min(1, "Please select an item type"),
   itemSaleType: z.enum(["Per KG", "Per PCS"], {
     required_error: "Please select a sale type",
   }),
@@ -65,6 +63,10 @@ export default function ItemManagement() {
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["/api/items"],
+  });
+
+  const { data: itemTypes = [] } = useQuery<ItemType[]>({
+    queryKey: ["/api/item-types"],
   });
 
   // Get next item number
@@ -661,10 +663,11 @@ export default function ItemManagement() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="Fish">Fish</SelectItem>
-                          <SelectItem value="Non-Fish">Non-Fish</SelectItem>
-                          <SelectItem value="Drinks">Drinks</SelectItem>
-                          <SelectItem value="Other">Other</SelectItem>
+                          {itemTypes.filter(type => type.isActive === "true").map((type) => (
+                            <SelectItem key={type.id} value={type.name}>
+                              {type.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -804,10 +807,11 @@ export default function ItemManagement() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="Fish">Fish</SelectItem>
-                <SelectItem value="Non-Fish">Non-Fish</SelectItem>
-                <SelectItem value="Drinks">Drinks</SelectItem>
-                <SelectItem value="Other">Other</SelectItem>
+                {itemTypes.filter(type => type.isActive === "true").map((type) => (
+                  <SelectItem key={type.id} value={type.name}>
+                    {type.name}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
@@ -971,10 +975,11 @@ export default function ItemManagement() {
                             </SelectTrigger>
                           </FormControl>
                           <SelectContent>
-                            <SelectItem value="Fish">Fish</SelectItem>
-                            <SelectItem value="Non-Fish">Non-Fish</SelectItem>
-                            <SelectItem value="Drinks">Drinks</SelectItem>
-                            <SelectItem value="Other">Other</SelectItem>
+                            {itemTypes.filter(type => type.isActive === "true").map((type) => (
+                              <SelectItem key={type.id} value={type.name}>
+                                {type.name}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                         <FormMessage />

@@ -18,7 +18,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import type { Expense, InsertExpense } from "@shared/schema";
+import type { Expense, InsertExpense, ExpenseCategory } from "@shared/schema";
 
 // Form validation schema
 const expenseFormSchema = z.object({
@@ -61,6 +61,11 @@ export default function ExpenseManagement() {
   // Fetch expenses
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
+  });
+
+  // Fetch expense categories
+  const { data: expenseCategories = [] } = useQuery<ExpenseCategory[]>({
+    queryKey: ["/api/expense-categories"],
   });
 
   // Original pagination calculations (kept for backward compatibility)
@@ -781,12 +786,11 @@ export default function ExpenseManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    <SelectItem value="Food & Supplies">Food & Supplies</SelectItem>
-                    <SelectItem value="Equipment">Equipment</SelectItem>
-                    <SelectItem value="Transport">Transport</SelectItem>
-                    <SelectItem value="Utilities">Utilities</SelectItem>
-                    <SelectItem value="Maintenance">Maintenance</SelectItem>
-                    <SelectItem value="Other">Other</SelectItem>
+                    {expenseCategories.filter(category => category.isActive === "true").map((category) => (
+                      <SelectItem key={category.id} value={category.name}>
+                        {category.name}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -996,12 +1000,11 @@ export default function ExpenseManagement() {
                               <SelectValue placeholder="Select category" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="Food & Supplies">Food & Supplies</SelectItem>
-                              <SelectItem value="Equipment">Equipment</SelectItem>
-                              <SelectItem value="Transport">Transport</SelectItem>
-                              <SelectItem value="Utilities">Utilities</SelectItem>
-                              <SelectItem value="Maintenance">Maintenance</SelectItem>
-                              <SelectItem value="Other">Other</SelectItem>
+                              {expenseCategories.filter(category => category.isActive === "true").map((category) => (
+                                <SelectItem key={category.id} value={category.name}>
+                                  {category.name}
+                                </SelectItem>
+                              ))}
                             </SelectContent>
                           </Select>
                         </FormControl>
