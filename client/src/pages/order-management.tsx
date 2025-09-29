@@ -836,9 +836,11 @@ export default function OrderManagement() {
                     // Calculate item base total
                     let itemTotal = 0;
                     if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                      itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+                      // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+                      itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
                     } else {
-                      itemTotal = item.liveWeight * item.price;
+                      // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
+                      itemTotal = (item.liveWeight / 1000) * item.price;
                     }
                     
                     subtotal += itemTotal;
@@ -886,9 +888,11 @@ export default function OrderManagement() {
                               // Calculate item totals
                               let baseTotal = 0;
                               if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                                baseTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+                                // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+                                baseTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
                               } else {
-                                baseTotal = item.liveWeight * item.price;
+                                // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
+                                baseTotal = (item.liveWeight / 1000) * item.price;
                               }
                               
                               let itemDiscount = 0;
@@ -904,7 +908,7 @@ export default function OrderManagement() {
                               return (
                                 <TableRow key={index}>
                                   <TableCell className="font-medium">{item.name}</TableCell>
-                                  <TableCell>{item.liveWeight}</TableCell>
+                                  <TableCell>{item.liveWeight}g</TableCell>
                                   <TableCell>{item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG'}</TableCell>
                                   <TableCell>{formatCurrency(item.price)}</TableCell>
                                   <TableCell>{formatCurrency(baseTotal)}</TableCell>
