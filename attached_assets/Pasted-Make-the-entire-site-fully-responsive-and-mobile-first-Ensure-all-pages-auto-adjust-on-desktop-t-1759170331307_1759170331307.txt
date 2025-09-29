@@ -1,0 +1,59 @@
+Make the entire site fully responsive and mobile-first.
+- Ensure all pages auto-adjust on desktop, tablet, and mobile without zooming or horizontal scrolling.
+- Use a fluid grid and flexbox for layouts.
+- Make buttons and inputs large enough for touch screens.
+- Test on iOS Safari, Chrome Android, and small screen sizes (320px and up).
+
+Fix all scrolling and zoom issues.
+- Remove unnecessary horizontal scrollbars.
+- Prevent overlapping elements.
+- Use sticky headers/footers where needed.
+- Ensure order forms and reports are easily readable without zooming.
+
+Optimize the site for performance.
+- Target Lighthouse mobile score ≥ 90.
+- Load pages in under 2.5s on slow 3G.
+- Add lazy-loading for heavy tables and images.
+- Cache static resources and API GET requests.
+- Minify CSS/JS and remove unused code.
+
+Implement offline-first with PWA standards.
+- Add a service worker and manifest.
+- Allow creating orders, expenses, and stock entries offline.
+- Store offline entries in IndexedDB.
+- Sync automatically when internet reconnects.
+- Show sync status and last sync time in UI.
+
+
+Daily Orders (UX, Mobile, Offline):
+   - Revamp Create New Order page with a clean, mobile-first design.
+   - Inline sections: Order Header → Items → Discounts → Summary → Submit.
+   - Show live row totals and pinned order total.
+   - Lock fields: Order Number (auto-generated), Price/KG (from Item Management).
+   - Add item-level discounts (TK/%) and full order-level discount.
+   - Fix scrolling and zoom issues: responsive grid, no horizontal scroll, large tap targets.
+   - Support offline-first (PWA): allow creating orders offline, store in IndexedDB, sync when online.
+   - Orders validate before submission; errors are inline.
+   - Final order total calculation: Σ(Row Totals) – discounts.
+
+
+User Management (RBAC):
+   - Add "User Management" in Admin Panel.
+   - Roles: Super Admin, Admin, Manager, Cashier, Staff.
+   - Permissions per role (view, create, edit, delete, export).
+   - UI to assign roles and access.
+   - User create/edit/delete, active/inactive toggle.
+   - Audit log for actions (orders, stock, payments).
+
+ Dashboard:
+   - Multi-widget Dashboard Overview:
+     * Cards: Revenue, Orders, Avg Order Value, Paid vs Unpaid.
+     * Recent Orders list (clickable).
+     * Low Stock / Mismatch alerts.
+   - Responsive for mobile and fast load (optimize for slow networks).
+
+Performance & Reliability:
+   - Optimize for Lighthouse mobile score ≥ 90, TTI < 2.5s on slow 3G.
+   - Use skeleton loaders, lazy-load heavy sections.
+   - Retry API calls with backoff.
+   - Ensure error handling and user-friendly alerts.

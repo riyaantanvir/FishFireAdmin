@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2, Plus, Eye, DollarSign } from "lucide-react";
+import { Search, Trash2, Plus, Eye, DollarSign, Calendar, ShoppingCart } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -541,80 +541,206 @@ export default function DailyOrders() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-foreground">Daily Orders</h2>
-        <p className="text-muted-foreground">Multi-item order management with full order discounts</p>
+      <div className="space-y-2">
+        <h2 className="text-xl sm:text-2xl font-bold text-foreground">Daily Orders</h2>
+        <p className="text-sm sm:text-base text-muted-foreground">Multi-item order management with full order discounts</p>
       </div>
 
       {/* Order Entry Form */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Create New Order</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <div className="space-y-4 sm:space-y-6">
+        {/* Sticky Order Summary - Mobile */}
+        <div className="sticky top-16 z-40 lg:hidden">
+          <Card className="border-primary/20 bg-primary/5">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base flex items-center justify-between">
+                <span>Order Total</span>
+                <Badge variant="secondary" className="text-sm font-bold">
+                  TK {orderSummary.finalTotal.toFixed(2)}
+                </Badge>
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        </div>
+
+        <Card>
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg sm:text-xl">Create New Order</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-6">
           <Form {...form}>
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               
-              {/* Order Header */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
-                <FormField
-                  control={form.control}
-                  name="orderNumber"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Order Number</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Auto-generated"
-                          data-testid="input-order-number"
-                          readOnly
-                          className="bg-muted/50"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
-                <FormField
-                  control={form.control}
-                  name="orderDate"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Order Date</FormLabel>
-                      <FormControl>
-                        <Input 
-                          type="date"
-                          data-testid="input-order-date"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
+              {/* Order Header - Mobile-Responsive */}
+              <div className="space-y-4">
+                <h3 className="text-base font-semibold flex items-center">
+                  <Calendar className="h-4 w-4 mr-2" />
+                  Order Details
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 bg-muted/30 rounded-lg border">
+                  <FormField
+                    control={form.control}
+                    name="orderNumber"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Order Number</FormLabel>
+                        <FormControl>
+                          <Input 
+                            placeholder="Auto-generated"
+                            data-testid="input-order-number"
+                            readOnly
+                            className="bg-muted/50 h-11 sm:h-10"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  
+                  <FormField
+                    control={form.control}
+                    name="orderDate"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel className="text-sm font-medium">Order Date</FormLabel>
+                        <FormControl>
+                          <Input 
+                            type="date"
+                            data-testid="input-order-date"
+                            className="h-11 sm:h-10"
+                            {...field} 
+                          />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
               </div>
 
-              {/* Order Items Table */}
-              <div>
-                <div className="flex justify-between items-center mb-4">
-                  <h3 className="text-lg font-semibold">Order Items</h3>
+              {/* Order Items Section */}
+              <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <h3 className="text-base font-semibold flex items-center">
+                    <ShoppingCart className="h-4 w-4 mr-2" />
+                    Order Items ({orderItems.length})
+                  </h3>
                   <Button 
                     type="button" 
                     variant="outline" 
                     size="sm" 
                     onClick={addItemRow}
                     data-testid="button-add-item"
+                    className="w-full sm:w-auto h-11 sm:h-9"
                   >
                     <Plus className="h-4 w-4 mr-2" />
                     Add Item
                   </Button>
                 </div>
                 
-                <div className="border rounded-lg overflow-hidden">
+                {/* Mobile Card Layout */}
+                <div className="space-y-4 lg:hidden">
+                  {orderItems.map((item, index) => (
+                    <Card key={index} className="p-4 space-y-4">
+                      <div className="flex justify-between items-start">
+                        <div className="flex-1">
+                          <Label className="text-sm font-medium">Item</Label>
+                          <Select 
+                            value={item.itemId} 
+                            onValueChange={(value) => updateOrderItem(index, 'itemId', value)}
+                          >
+                            <SelectTrigger data-testid={`select-item-${index}`} className="mt-1 h-11">
+                              <SelectValue placeholder="Choose an item" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {items.filter(i => i.isActive).map((availableItem) => (
+                                <SelectItem key={availableItem.id} value={availableItem.id}>
+                                  {availableItem.name} - {availableItem.itemSaleType || "Per KG"}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeItemRow(index)}
+                          data-testid={`button-remove-item-${index}`}
+                          className="ml-2 h-11 w-11 p-0 text-destructive hover:text-destructive hover:bg-destructive/10"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium">Sale Type</Label>
+                          <div className="mt-1 text-sm font-medium text-muted-foreground p-2 bg-muted/50 rounded-md">
+                            {item.itemSaleType || "Per KG"}
+                          </div>
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Weight/PCS</Label>
+                          <div className="mt-1 text-sm font-medium p-2 bg-muted/50 rounded-md">
+                            {item.itemSaleType === "Per PCS" && item.weightPerPCS ? (
+                              `${item.weightPerPCS} KG`
+                            ) : (
+                              <span className="text-muted-foreground">-</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-sm font-medium">
+                            Live Weight ({item.itemSaleType === "Per PCS" ? "PCS" : "gm"})
+                          </Label>
+                          <Input
+                            type="number"
+                            step="1"
+                            min="1"
+                            value={item.itemSaleType === "Per PCS" ? item.liveWeight : Math.round((item.liveWeight || 0) * 1000)}
+                            onChange={(e) => {
+                              const inputValue = Number(e.target.value);
+                              const kgValue = item.itemSaleType === "Per PCS" ? inputValue : inputValue / 1000;
+                              updateOrderItem(index, 'liveWeight', kgValue);
+                            }}
+                            data-testid={`input-live-weight-${index}`}
+                            className="mt-1 h-11"
+                            placeholder="0"
+                          />
+                        </div>
+                        <div>
+                          <Label className="text-sm font-medium">Price/KG</Label>
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            value={item.price || ""}
+                            onChange={(e) => updateOrderItem(index, 'price', Number(e.target.value))}
+                            data-testid={`input-price-${index}`}
+                            className="mt-1 h-11"
+                            placeholder="0.00"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-sm font-medium text-muted-foreground">Row Total</span>
+                        <span className="text-lg font-bold text-primary">
+                          TK {calculateItemTotal(item).toFixed(2)}
+                        </span>
+                      </div>
+                    </Card>
+                  ))}
+                </div>
+
+                {/* Desktop Table Layout */}
+                <div className="hidden lg:block border rounded-lg overflow-hidden">
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -728,63 +854,80 @@ export default function DailyOrders() {
                 </div>
               </div>
 
-              {/* Order-Level Discounts */}
-              <div className="p-4 bg-muted/30 rounded-lg">
-                <h3 className="text-lg font-semibold mb-4">Order Discount</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label>Order Discount Amount</Label>
-                    <Input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      value={orderDiscountAmount}
-                      onChange={(e) => setOrderDiscountAmount(Number(e.target.value) || 0)}
-                      placeholder="0.00"
-                      data-testid="input-order-discount-amount"
-                    />
-                  </div>
-                  <div>
-                    <Label>Order Discount %</Label>
-                    <Input
-                      type="number"
-                      step="0.1"
-                      min="0"
-                      max="100"
-                      value={orderDiscountPercentage}
-                      onChange={(e) => setOrderDiscountPercentage(Number(e.target.value) || 0)}
-                      placeholder="0"
-                      data-testid="input-order-discount-percentage"
-                    />
+              {/* Order-Level Discounts - Mobile-Responsive */}
+              <div className="space-y-4">
+                <h3 className="text-base font-semibold flex items-center">
+                  <DollarSign className="h-4 w-4 mr-2" />
+                  Order Discounts
+                </h3>
+                <div className="p-4 bg-muted/30 rounded-lg border space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Label className="text-sm font-medium">Discount Amount (TK)</Label>
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={orderDiscountAmount}
+                        onChange={(e) => setOrderDiscountAmount(Number(e.target.value) || 0)}
+                        placeholder="0.00"
+                        data-testid="input-order-discount-amount"
+                        className="mt-1 h-11 sm:h-10"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Discount Percentage (%)</Label>
+                      <Input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="100"
+                        value={orderDiscountPercentage}
+                        onChange={(e) => setOrderDiscountPercentage(Number(e.target.value) || 0)}
+                        placeholder="0"
+                        data-testid="input-order-discount-percentage"
+                        className="mt-1 h-11 sm:h-10"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Order Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div>
-                  <Label>Subtotal</Label>
-                  <div className="text-lg font-medium">TK {orderSummary.subtotal.toFixed(2)}</div>
-                </div>
-                <div>
-                  <Label>Order Discounts</Label>
-                  <div className="text-lg font-medium text-red-600">-TK {orderSummary.orderDiscounts.toFixed(2)}</div>
-                </div>
-                <div>
-                  <Label>Final Order Total</Label>
-                  <div className="text-xl font-bold">TK {orderSummary.finalTotal.toFixed(2)}</div>
+              {/* Order Summary - Mobile-Responsive */}
+              <div className="space-y-4">
+                <h3 className="text-base font-semibold flex items-center">
+                  <Receipt className="h-4 w-4 mr-2" />
+                  Order Summary
+                </h3>
+                <div className="p-4 bg-primary/5 border border-primary/20 rounded-lg space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div className="text-center sm:text-left">
+                      <Label className="text-sm font-medium text-muted-foreground">Subtotal</Label>
+                      <div className="text-lg font-medium">TK {orderSummary.subtotal.toFixed(2)}</div>
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <Label className="text-sm font-medium text-muted-foreground">Discounts</Label>
+                      <div className="text-lg font-medium text-red-600">-TK {orderSummary.orderDiscounts.toFixed(2)}</div>
+                    </div>
+                    <div className="text-center sm:text-left">
+                      <Label className="text-sm font-medium text-muted-foreground">Final Total</Label>
+                      <div className="text-xl font-bold text-primary">TK {orderSummary.finalTotal.toFixed(2)}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Submit Button */}
-              <Button 
-                type="submit" 
-                className="w-full"
+              {/* Submit Button - Mobile-Responsive */}
+              <div className="pt-4">
+                <Button 
+                  type="submit" 
+                  className="w-full h-12 text-base font-semibold"
                 disabled={createOrderMutation.isPending}
                 data-testid="button-submit-order"
               >
                 Create Order
               </Button>
+              </div>
             </form>
           </Form>
         </CardContent>
@@ -1215,6 +1358,7 @@ export default function DailyOrders() {
           )}
         </DialogContent>
       </Dialog>
+      </div>
     </div>
   );
 }
