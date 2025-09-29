@@ -22,7 +22,7 @@ import {
 import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import type { Order } from "@shared/schema";
+import type { Order, Item } from "@shared/schema";
 
 export default function OrderManagement() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -452,6 +452,8 @@ export default function OrderManagement() {
   // Submit import data with batch processing
   const submitImportMutation = useMutation({
     mutationFn: async () => {
+      // Get current items from query cache
+      const currentItems = queryClient.getQueryData<Item[]>(["/api/items"]) || [];
       const BATCH_SIZE = 50; // Process 50 orders at a time
       const batches = [];
       
@@ -472,15 +474,23 @@ export default function OrderManagement() {
           let subtotal = 0;
           let itemDiscounts = 0;
           
-          order.items.forEach((item: any) => {
+          // Process each item and find matching item data for calculations
+          const processedItems = order.items.map((item: any) => {
+            // Find matching item from the items list to get weightPerPCS if needed
+            const matchingItem = currentItems.find((i: any) => i.name === item.name);
+            
             let itemTotal = 0;
-            if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+            let weightPerPCS = Number(matchingItem?.weightPerPCS) || 0;
+            let actualPrice = Number(item.price) || Number(matchingItem?.price) || 0;
+            
+            if (item.itemSaleType === "Per PCS" && weightPerPCS) {
               // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
-              itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
+              itemTotal = ((item.liveWeight / 1000) * weightPerPCS) * actualPrice;
             } else {
               // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
-              itemTotal = (item.liveWeight / 1000) * item.price;
+              itemTotal = (item.liveWeight / 1000) * actualPrice;
             }
+            
             subtotal += itemTotal;
             
             let discount = 0;
@@ -491,6 +501,18 @@ export default function OrderManagement() {
               discount += item.discountAmount;
             }
             itemDiscounts += discount;
+            
+            // Return processed item with all necessary fields
+            return {
+              itemId: matchingItem?.id || "",
+              name: item.name,
+              liveWeight: item.liveWeight,
+              price: actualPrice,
+              itemSaleType: item.itemSaleType,
+              weightPerPCS: weightPerPCS,
+              discountAmount: item.discountAmount || 0,
+              discountPercentage: item.discountPercentage || 0,
+            };
           });
 
           const finalTotal = Math.max(0, subtotal - itemDiscounts);
@@ -499,7 +521,7 @@ export default function OrderManagement() {
             orderNumber: order.orderNumber,
             orderDate: order.orderDate,
             items: JSON.stringify({
-              items: order.items,
+              items: processedItems,
               orderDiscountAmount: 0,
               orderDiscountPercentage: 0,
             }),
