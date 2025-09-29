@@ -14,7 +14,7 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Trash2, Plus, Eye, DollarSign, Calendar, ShoppingCart } from "lucide-react";
+import { Search, Trash2, Plus, Eye, DollarSign, Calendar, ShoppingCart, Receipt } from "lucide-react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
@@ -732,7 +732,7 @@ export default function DailyOrders() {
                       <div className="flex justify-between items-center pt-2 border-t">
                         <span className="text-sm font-medium text-muted-foreground">Row Total</span>
                         <span className="text-lg font-bold text-primary">
-                          TK {calculateItemTotal(item).toFixed(2)}
+                          TK {getRowTotal(item).toFixed(2)}
                         </span>
                       </div>
                     </Card>
