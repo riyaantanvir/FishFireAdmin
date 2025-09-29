@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, decimal, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, decimal, integer, boolean } from "drizzle-orm/pg-core";
+import { relations } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -7,7 +8,9 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
-  role: text("role").notNull().default("user"),
+  role: text("role").notNull().default("user"), // Legacy field, kept for compatibility
+  isActive: boolean("is_active").notNull().default(true),
+  lastLoginAt: timestamp("last_login_at"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -121,12 +124,63 @@ export const expenseCategories = pgTable("expense_categories", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
-  role: true,
+// RBAC Tables
+export const roles = pgTable("roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(), // Admin, Manager, Cashier, Kitchen, Staff
+  description: text("description"), // Optional description of the role
+  isActive: boolean("is_active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const permissions = pgTable("permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull().unique(), // view:orders, create:orders, edit:orders, delete:orders, export:orders, etc.
+  resource: text("resource").notNull(), // orders, items, expenses, users, etc.
+  action: text("action").notNull(), // view, create, edit, delete, export
+  description: text("description"), // Optional description
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const rolePermissions = pgTable("role_permissions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  roleId: varchar("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  permissionId: varchar("permission_id").notNull().references(() => permissions.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const userRoles = pgTable("user_roles", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  roleId: varchar("role_id").notNull().references(() => roles.id, { onDelete: "cascade" }),
+  assignedBy: varchar("assigned_by").references(() => users.id, { onDelete: "set null" }), // Nullable to avoid breaking existing functionality
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }), // Nullable for system actions
+  action: text("action").notNull(), // create, update, delete, export, login, etc.
+  resource: text("resource").notNull(), // orders, items, expenses, users, etc.
+  resourceId: varchar("resource_id"), // ID of the specific resource affected (optional)
+  oldData: text("old_data"), // JSON string of old data (for updates/deletes)
+  newData: text("new_data"), // JSON string of new data (for creates/updates)
+  metadata: text("metadata"), // Additional context as JSON
+  ipAddress: text("ip_address"), // IP address of the user
+  userAgent: text("user_agent"), // User agent string
+  success: boolean("success").notNull().default(true), // Whether the action succeeded
+  errorMessage: text("error_message"), // Error message if action failed
+  actorName: text("actor_name"), // Fallback name when userId is null (for system actions)
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  lastLoginAt: true,
 }).extend({
-  role: z.enum(["user", "admin"]).optional(),
+  role: z.string().optional(), // Allow any string for legacy compatibility and future RBAC roles
+  isActive: z.boolean().optional(),
 });
 
 export const insertOrderSchema = createInsertSchema(orders).omit({
@@ -169,6 +223,37 @@ export const insertExpenseCategorySchema = createInsertSchema(expenseCategories)
   createdAt: true,
 });
 
+// RBAC Insert Schemas
+export const insertRoleSchema = createInsertSchema(roles).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPermissionSchema = createInsertSchema(permissions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertRolePermissionSchema = createInsertSchema(rolePermissions).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertUserRoleSchema = createInsertSchema(userRoles).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  assignedBy: z.string().optional(), // Make assignedBy optional
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+}).extend({
+  userId: z.string().optional(), // Make userId optional for system actions
+  actorName: z.string().optional(), // Optional fallback name
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertOrder = z.infer<typeof insertOrderSchema>;
@@ -187,3 +272,23 @@ export type InsertItemType = z.infer<typeof insertItemTypeSchema>;
 export type ItemType = typeof itemTypes.$inferSelect;
 export type InsertExpenseCategory = z.infer<typeof insertExpenseCategorySchema>;
 export type ExpenseCategory = typeof expenseCategories.$inferSelect;
+
+// RBAC Types
+export type InsertRole = z.infer<typeof insertRoleSchema>;
+export type Role = typeof roles.$inferSelect;
+export type InsertPermission = z.infer<typeof insertPermissionSchema>;
+export type Permission = typeof permissions.$inferSelect;
+export type InsertRolePermission = z.infer<typeof insertRolePermissionSchema>;
+export type RolePermission = typeof rolePermissions.$inferSelect;
+export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
+export type UserRole = typeof userRoles.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
+export type AuditLog = typeof auditLogs.$inferSelect;
+
+// RBAC Constants - these should match the seeded data in the database
+export const DEFAULT_ROLES = ["Admin", "Manager", "Cashier", "Kitchen", "Staff"] as const;
+export const PERMISSION_ACTIONS = ["view", "create", "edit", "delete", "export"] as const;
+export const RESOURCES = ["orders", "items", "expenses", "users", "roles", "reports", "stock"] as const;
+
+// Note: For production use, role names and permissions should be fetched from the database
+// rather than using these constants to allow for dynamic role management
