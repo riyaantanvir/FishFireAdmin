@@ -613,18 +613,22 @@ export default function OrderManagement() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-3xl font-bold">Order Management</h1>
-        <div className="flex items-center gap-4">
-          <div className="flex gap-2">
+      {/* Header - Mobile Responsive */}
+      <div className="space-y-4 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
+        <h1 className="text-2xl sm:text-3xl font-bold">Order Management</h1>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+          {/* Action Buttons - Mobile First */}
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={downloadTemplate}
               data-testid="button-template-download"
+              className="flex-1 sm:flex-none"
             >
               <FileText className="h-4 w-4 mr-2" />
-              Template
+              <span className="hidden sm:inline">Template</span>
+              <span className="sm:hidden">Template</span>
             </Button>
             <Button
               variant="outline"
@@ -632,18 +636,22 @@ export default function OrderManagement() {
               onClick={exportOrdersToCSV}
               disabled={orders.length === 0}
               data-testid="button-export-orders"
+              className="flex-1 sm:flex-none"
             >
               <Download className="h-4 w-4 mr-2" />
-              Export
+              <span className="hidden sm:inline">Export</span>
+              <span className="sm:hidden">Export</span>
             </Button>
             <Button
               variant="outline"
               size="sm"
               onClick={() => document.getElementById('import-file-input')?.click()}
               data-testid="button-import-orders"
+              className="flex-1 sm:flex-none"
             >
               <Upload className="h-4 w-4 mr-2" />
-              Import
+              <span className="hidden sm:inline">Import</span>
+              <span className="sm:hidden">Import</span>
             </Button>
             <input
               id="import-file-input"
@@ -658,7 +666,7 @@ export default function OrderManagement() {
               }}
             />
           </div>
-          <p className="text-gray-600 dark:text-gray-300">
+          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 text-center sm:text-left">
             Total Orders: {orders.length}
           </p>
         </div>
@@ -670,18 +678,18 @@ export default function OrderManagement() {
           <CardTitle>Search Orders</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
+          <div className="flex flex-col gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
               <Input
                 data-testid="input-search-orders"
-                placeholder="Search by customer name or order number..."
+                placeholder="Search by order number..."
                 value={searchTerm}
                 onChange={(e) => {
                   setSearchTerm(e.target.value);
                   setCurrentPage(1); // Reset to first page on search
                 }}
-                className="pl-8"
+                className="pl-10 h-12 text-base"
               />
             </div>
           </div>
@@ -702,7 +710,8 @@ export default function OrderManagement() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto">
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -749,35 +758,95 @@ export default function OrderManagement() {
                 </Table>
               </div>
 
-              {/* Pagination */}
+              {/* Mobile Card View */}
+              <div className="md:hidden space-y-4">
+                {currentOrders.map((order) => (
+                  <Card key={order.id} className="p-4">
+                    <div className="space-y-3">
+                      {/* Order Header */}
+                      <div className="flex items-start justify-between">
+                        <div className="space-y-1">
+                          <h3 className="font-semibold text-lg" data-testid={`text-order-number-${order.id}`}>
+                            {order.orderNumber}
+                          </h3>
+                          <p className="text-sm text-muted-foreground" data-testid={`text-order-date-${order.id}`}>
+                            {formatDate(order.orderDate)}
+                          </p>
+                        </div>
+                        <Badge
+                          variant={order.status === "completed" ? "default" : "secondary"}
+                          data-testid={`badge-status-${order.id}`}
+                        >
+                          {order.status}
+                        </Badge>
+                      </div>
+
+                      {/* Order Details */}
+                      <div className="flex items-center justify-between pt-2 border-t">
+                        <div>
+                          <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
+                          <p className="text-xl font-bold text-primary" data-testid={`text-final-total-${order.id}`}>
+                            {formatCurrency(order.totalAmount)}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleViewOrder(order)}
+                          data-testid={`button-view-order-${order.id}`}
+                          className="flex items-center gap-2"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View Details
+                        </Button>
+                      </div>
+                    </div>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Pagination - Mobile Responsive */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4">
-                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                <div className="mt-6 space-y-4">
+                  {/* Mobile Pagination Info */}
+                  <div className="text-center text-sm text-gray-600 dark:text-gray-300">
                     Showing {startIndex + 1} to {Math.min(endIndex, filteredOrders.length)} of{" "}
                     {filteredOrders.length} orders
                   </div>
-                  <div className="flex items-center space-x-2">
+                  
+                  {/* Pagination Controls */}
+                  <div className="flex items-center justify-center space-x-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
                       data-testid="button-previous-page"
+                      className="flex items-center gap-1"
                     >
                       <ChevronLeft className="h-4 w-4" />
-                      Previous
+                      <span className="hidden sm:inline">Previous</span>
                     </Button>
-                    <span className="text-sm" data-testid="text-page-info">
-                      Page {currentPage} of {totalPages}
-                    </span>
+                    
+                    <div className="flex items-center space-x-1">
+                      <span className="text-sm font-medium px-3 py-1 bg-primary text-primary-foreground rounded" data-testid="text-page-info">
+                        {currentPage}
+                      </span>
+                      <span className="text-sm text-muted-foreground">of</span>
+                      <span className="text-sm font-medium">
+                        {totalPages}
+                      </span>
+                    </div>
+                    
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
                       data-testid="button-next-page"
+                      className="flex items-center gap-1"
                     >
-                      Next
+                      <span className="hidden sm:inline">Next</span>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -788,40 +857,56 @@ export default function OrderManagement() {
         </CardContent>
       </Card>
 
-      {/* Order Details Modal */}
+      {/* Order Details Modal - Mobile Responsive */}
       <Dialog open={!!viewOrderModal} onOpenChange={() => setViewOrderModal(null)}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-4xl h-[90vh] max-h-[80vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Order Details</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">Order Details</DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
               Complete information for {viewOrderModal?.orderNumber}
             </DialogDescription>
           </DialogHeader>
           
           {viewOrderModal && (
             <div className="space-y-6">
-              {/* Order Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <h3 className="font-semibold mb-2">Order Information</h3>
-                  <div className="space-y-2">
-                    <p><strong>Order Number:</strong> {viewOrderModal.orderNumber}</p>
-                    <p><strong>Customer:</strong> {viewOrderModal.customerName}</p>
-                    <p><strong>Order Date:</strong> {formatDate(viewOrderModal.orderDate)}</p>
-                    <p><strong>Status:</strong> 
-                      <Badge className="ml-2" variant={viewOrderModal.status === "completed" ? "default" : "secondary"}>
+              {/* Order Info - Mobile Responsive */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 text-sm sm:text-base">Order Information</h3>
+                  <div className="space-y-2 text-sm sm:text-base">
+                    <div className="flex flex-col sm:flex-row sm:justify-between">
+                      <span className="font-medium">Order Number:</span>
+                      <span className="text-muted-foreground sm:text-foreground">{viewOrderModal.orderNumber}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between">
+                      <span className="font-medium">Customer:</span>
+                      <span className="text-muted-foreground sm:text-foreground">{viewOrderModal.customerName}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between">
+                      <span className="font-medium">Order Date:</span>
+                      <span className="text-muted-foreground sm:text-foreground">{formatDate(viewOrderModal.orderDate)}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center">
+                      <span className="font-medium">Status:</span>
+                      <Badge className="w-fit mt-1 sm:mt-0" variant={viewOrderModal.status === "completed" ? "default" : "secondary"}>
                         {viewOrderModal.status}
                       </Badge>
-                    </p>
+                    </div>
                   </div>
-                </div>
-                <div>
-                  <h3 className="font-semibold mb-2">Order Summary</h3>
-                  <div className="space-y-2">
-                    <p><strong>Total Amount:</strong> {formatCurrency(viewOrderModal.totalAmount)}</p>
-                    <p><strong>Created:</strong> {viewOrderModal.createdAt ? formatDate(viewOrderModal.createdAt.toString()) : 'N/A'}</p>
+                </Card>
+                <Card className="p-4">
+                  <h3 className="font-semibold mb-3 text-sm sm:text-base">Order Summary</h3>
+                  <div className="space-y-2 text-sm sm:text-base">
+                    <div className="flex flex-col sm:flex-row sm:justify-between">
+                      <span className="font-medium">Total Amount:</span>
+                      <span className="text-lg font-bold text-primary">{formatCurrency(viewOrderModal.totalAmount)}</span>
+                    </div>
+                    <div className="flex flex-col sm:flex-row sm:justify-between">
+                      <span className="font-medium">Created:</span>
+                      <span className="text-muted-foreground sm:text-foreground">{viewOrderModal.createdAt ? formatDate(viewOrderModal.createdAt.toString()) : 'N/A'}</span>
+                    </div>
                   </div>
-                </div>
+                </Card>
               </div>
 
               {/* Order Items */}
@@ -876,7 +961,8 @@ export default function OrderManagement() {
                   
                   return (
                     <>
-                      <div className="overflow-x-auto">
+                      {/* Desktop Table - Order Items */}
+                      <div className="hidden lg:block overflow-x-auto">
                         <Table>
                           <TableHeader>
                             <TableRow>
@@ -940,6 +1026,77 @@ export default function OrderManagement() {
                           </TableBody>
                         </Table>
                       </div>
+
+                      {/* Mobile Card View - Order Items */}
+                      <div className="lg:hidden space-y-3">
+                        {items.map((item: any, index: number) => {
+                          // Calculate item totals
+                          let baseTotal = 0;
+                          if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
+                            baseTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
+                          } else if (item.itemSaleType === "Per PCS") {
+                            baseTotal = item.liveWeight * item.price;
+                          } else {
+                            baseTotal = (item.liveWeight / 1000) * item.price;
+                          }
+                          
+                          let itemDiscount = 0;
+                          if (item.discountPercentage > 0) {
+                            itemDiscount += baseTotal * (item.discountPercentage / 100);
+                          }
+                          if (item.discountAmount > 0) {
+                            itemDiscount += item.discountAmount;
+                          }
+                          
+                          const netTotal = Math.max(0, baseTotal - itemDiscount);
+                          
+                          return (
+                            <Card key={index} className="p-4">
+                              <div className="space-y-2">
+                                <div className="flex justify-between items-start">
+                                  <h4 className="font-semibold text-sm">{item.name}</h4>
+                                  <Badge variant="outline" className="text-xs">
+                                    {item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG'}
+                                  </Badge>
+                                </div>
+                                
+                                <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Weight:</span>
+                                    <span>
+                                      {item.itemSaleType === 'Per PCS' && !item.weightPerPCS ? 
+                                        item.liveWeight : 
+                                        `${item.liveWeight}g`
+                                      }
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Price:</span>
+                                    <span>{formatCurrency(item.price)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Total:</span>
+                                    <span>{formatCurrency(baseTotal)}</span>
+                                  </div>
+                                  <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Discount:</span>
+                                    <span className="text-red-600">
+                                      {item.discountAmount > 0 && formatCurrency(item.discountAmount)}
+                                      {item.discountPercentage > 0 && (item.discountAmount > 0 ? ` + ${item.discountPercentage}%` : `${item.discountPercentage}%`)}
+                                      {item.discountAmount === 0 && item.discountPercentage === 0 && '-'}
+                                    </span>
+                                  </div>
+                                </div>
+                                
+                                <div className="flex justify-between items-center pt-2 border-t border-dashed">
+                                  <span className="text-sm font-medium">Net Total:</span>
+                                  <span className="text-sm font-bold text-primary">{formatCurrency(netTotal)}</span>
+                                </div>
+                              </div>
+                            </Card>
+                          );
+                        })}
+                      </div>
                       
                       {/* Order Summary */}
                       <div className="mt-4 border-t pt-4">
@@ -991,42 +1148,42 @@ export default function OrderManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Import Preview Modal */}
+      {/* Import Preview Modal - Mobile Responsive */}
       <Dialog open={importPreviewModal} onOpenChange={() => setImportPreviewModal(false)}>
-        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[80vh] overflow-y-auto p-4 sm:p-6">
           <DialogHeader>
-            <DialogTitle>Import Preview</DialogTitle>
-            <DialogDescription>
+            <DialogTitle className="text-lg sm:text-xl">Import Preview</DialogTitle>
+            <DialogDescription className="text-sm sm:text-base">
               Review the data before final import
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-6">
             {/* Import Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-4 sm:pt-6">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-blue-600">{importData.length}</div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Total Rows</p>
+                    <div className="text-xl sm:text-2xl font-bold text-blue-600">{importData.length}</div>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Total Rows</p>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-4 sm:pt-6">
                   <div className="text-center">
-                    <div className="text-2xl font-bold text-green-600">{mergedOrders.length}</div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Unique Orders</p>
+                    <div className="text-xl sm:text-2xl font-bold text-green-600">{mergedOrders.length}</div>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Unique Orders</p>
                   </div>
                 </CardContent>
               </Card>
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-4 sm:pt-6">
                   <div className="text-center">
-                    <div className={`text-2xl font-bold ${importErrors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                    <div className={`text-xl sm:text-2xl font-bold ${importErrors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
                       {importErrors.length}
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Validation Errors</p>
+                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Validation Errors</p>
                   </div>
                 </CardContent>
               </Card>
