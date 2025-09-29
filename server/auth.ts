@@ -49,18 +49,180 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
   if (authHeader) {
     const token = authHeader.split(' ')[1]; // Bearer TOKEN
     
-    jwt.verify(token, process.env.SESSION_SECRET!, (err, user) => {
+    jwt.verify(token, process.env.SESSION_SECRET!, async (err, user) => {
       if (err) {
         console.log('JWT verification failed:', err.message);
         return res.sendStatus(403);
       }
       
       req.user = user as SelectUser;
+      
+      // Update last login time (don't block authentication on failure)
+      if (req.user?.id) {
+        try {
+          await storage.updateUserLastLogin(req.user.id);
+        } catch (error) {
+          console.error('Failed to update last login time:', error);
+          // Continue with authentication even if last login update fails
+        }
+      }
+      
       next();
     });
   } else {
     console.log('No authorization header found');
     res.sendStatus(401);
+  }
+}
+
+// RBAC Middleware Functions
+
+// Middleware to require specific role(s)
+export function requireRole(...roleNames: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      await logAuditEvent(req, 'ACCESS_DENIED', 'AUTH', null, false, 'No authenticated user');
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    try {
+      // Get user roles
+      const userRoles = await storage.getUserRoles(req.user.id);
+      const roleIds = userRoles.map(ur => ur.roleId);
+      
+      // Get role objects
+      const roles = await storage.getRoles();
+      const userRoleNames = roles
+        .filter(role => roleIds.includes(role.id))
+        .map(role => role.name);
+
+      // Check if user has any of the required roles
+      const hasRequiredRole = roleNames.some(roleName => 
+        userRoleNames.includes(roleName)
+      );
+
+      if (!hasRequiredRole) {
+        await logAuditEvent(
+          req, 
+          'ACCESS_DENIED', 
+          'ROLE_CHECK', 
+          null, 
+          false, 
+          `Required roles: [${roleNames.join(', ')}], User roles: [${userRoleNames.join(', ')}]`
+        );
+        return res.status(403).json({ 
+          message: 'Insufficient role permissions',
+          required: roleNames,
+          userRoles: userRoleNames
+        });
+      }
+
+      // Log successful access
+      await logAuditEvent(
+        req, 
+        'ACCESS_GRANTED', 
+        'ROLE_CHECK', 
+        null, 
+        true, 
+        `Required roles: [${roleNames.join(', ')}], User roles: [${userRoleNames.join(', ')}]`
+      );
+
+      next();
+    } catch (error) {
+      console.error('Role check error:', error);
+      await logAuditEvent(req, 'ACCESS_ERROR', 'ROLE_CHECK', null, false, 'Role check failed');
+      return res.status(500).json({ message: 'Role verification failed' });
+    }
+  };
+}
+
+// Middleware to require specific permission(s)
+export function requirePermission(...permissionNames: string[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      await logAuditEvent(req, 'ACCESS_DENIED', 'AUTH', null, false, 'No authenticated user');
+      return res.status(401).json({ message: 'Authentication required' });
+    }
+
+    try {
+      // Get user permissions through roles
+      const userPermissions = await storage.getUserPermissions(req.user.id);
+      const userPermissionNames = userPermissions.map(p => p.name);
+
+      // Check if user has all required permissions
+      const hasAllPermissions = permissionNames.every(permName => 
+        userPermissionNames.includes(permName)
+      );
+
+      if (!hasAllPermissions) {
+        const missingPermissions = permissionNames.filter(permName => 
+          !userPermissionNames.includes(permName)
+        );
+        
+        await logAuditEvent(
+          req, 
+          'ACCESS_DENIED', 
+          'PERMISSION_CHECK', 
+          null, 
+          false, 
+          `Required permissions: [${permissionNames.join(', ')}], Missing: [${missingPermissions.join(', ')}]`
+        );
+        
+        return res.status(403).json({ 
+          message: 'Insufficient permissions',
+          required: permissionNames,
+          missing: missingPermissions
+        });
+      }
+
+      // Log successful access
+      await logAuditEvent(
+        req, 
+        'ACCESS_GRANTED', 
+        'PERMISSION_CHECK', 
+        null, 
+        true, 
+        `Required permissions: [${permissionNames.join(', ')}]`
+      );
+
+      next();
+    } catch (error) {
+      console.error('Permission check error:', error);
+      await logAuditEvent(req, 'ACCESS_ERROR', 'PERMISSION_CHECK', null, false, 'Permission check failed');
+      return res.status(500).json({ message: 'Permission verification failed' });
+    }
+  };
+}
+
+// Helper function to log audit events
+async function logAuditEvent(
+  req: Request,
+  action: string,
+  resource: string,
+  resourceId: string | null,
+  success: boolean,
+  errorMessage?: string
+) {
+  try {
+    await storage.createAuditLog({
+      userId: req.user?.id,
+      action,
+      resource,
+      resourceId,
+      ipAddress: req.ip || req.connection.remoteAddress || undefined,
+      userAgent: req.get('User-Agent') || undefined,
+      success,
+      errorMessage: errorMessage,
+      actorName: req.user?.username || undefined,
+      metadata: JSON.stringify({
+        url: req.originalUrl,
+        method: req.method,
+        params: req.params,
+        query: req.query
+      })
+    });
+  } catch (error) {
+    console.error('Failed to log audit event:', error);
   }
 }
 
