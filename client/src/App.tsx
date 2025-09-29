@@ -14,6 +14,7 @@ import ItemManagement from "@/pages/item-management";
 import OrderManagement from "@/pages/order-management";
 import ExpenseManagement from "@/pages/expense-management";
 import StockReconciliation from "@/pages/stock-reconciliation";
+import UserManagement from "@/pages/user-management";
 import Reports from "@/pages/reports";
 import Settings from "@/pages/settings";
 import { Header } from "@/components/layout/header";
@@ -124,6 +125,14 @@ function Router() {
         component={() => (
           <DashboardLayout>
             <StockReconciliation />
+          </DashboardLayout>
+        )} 
+      />
+      <ProtectedRoute 
+        path="/user-management" 
+        component={() => (
+          <DashboardLayout>
+            <UserManagement />
           </DashboardLayout>
         )} 
       />
