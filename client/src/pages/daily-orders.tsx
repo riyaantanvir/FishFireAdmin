@@ -34,7 +34,7 @@ import {
 const orderItemSchema = z.object({
   itemId: z.string().min(1, "Please select an item"),
   name: z.string(),
-  liveWeight: z.number().min(0.01, "Live weight must be greater than 0"),
+  liveWeight: z.number().min(0.001, "Live weight must be greater than 0"),
   price: z.number().min(0, "Price must be positive"),
   itemSaleType: z.string().optional(), // Per KG or Per PCS
   weightPerPCS: z.number().optional(), // Weight in KG for PCS items
@@ -684,7 +684,7 @@ export default function DailyOrders() {
                         <TableHead>Item</TableHead>
                         <TableHead>Sale Type</TableHead>
                         <TableHead>Weight/PCS</TableHead>
-                        <TableHead>Live Weight</TableHead>
+                        <TableHead>Live Weight (gm)</TableHead>
                         <TableHead>Price/KG</TableHead>
                         <TableHead>Discount Amount</TableHead>
                         <TableHead>Discount %</TableHead>
@@ -737,16 +737,20 @@ export default function DailyOrders() {
                             <div className="space-y-1">
                               <Input
                                 type="number"
-                                step="0.01"
-                                min="0.01"
-                                value={item.liveWeight}
-                                onChange={(e) => updateOrderItem(index, 'liveWeight', Number(e.target.value))}
+                                step="1"
+                                min="1"
+                                value={item.itemSaleType === "Per PCS" ? item.liveWeight : Math.round((item.liveWeight || 0) * 1000)}
+                                onChange={(e) => {
+                                  const inputValue = Number(e.target.value);
+                                  const kgValue = item.itemSaleType === "Per PCS" ? inputValue : inputValue / 1000;
+                                  updateOrderItem(index, 'liveWeight', kgValue);
+                                }}
                                 data-testid={`input-live-weight-${index}`}
                                 className="w-20"
-                                placeholder="0.00"
+                                placeholder={item.itemSaleType === "Per PCS" ? "0" : "0"}
                               />
                               <div className="text-xs text-muted-foreground text-center">
-                                {item.itemSaleType === "Per PCS" ? "PCS" : "KG"}
+                                {item.itemSaleType === "Per PCS" ? "PCS" : "gm"}
                               </div>
                             </div>
                           </TableCell>
