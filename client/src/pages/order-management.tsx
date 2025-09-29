@@ -484,8 +484,11 @@ export default function OrderManagement() {
             let actualPrice = Number(item.price) || Number(matchingItem?.price) || 0;
             
             if (item.itemSaleType === "Per PCS" && weightPerPCS) {
-              // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+              // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
               itemTotal = ((item.liveWeight / 1000) * weightPerPCS) * actualPrice;
+            } else if (item.itemSaleType === "Per PCS") {
+              // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
+              itemTotal = item.liveWeight * actualPrice;
             } else {
               // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
               itemTotal = (item.liveWeight / 1000) * actualPrice;
@@ -836,8 +839,11 @@ export default function OrderManagement() {
                     // Calculate item base total
                     let itemTotal = 0;
                     if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                      // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+                      // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
                       itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
+                    } else if (item.itemSaleType === "Per PCS") {
+                      // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
+                      itemTotal = item.liveWeight * item.price;
                     } else {
                       // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
                       itemTotal = (item.liveWeight / 1000) * item.price;
@@ -888,8 +894,11 @@ export default function OrderManagement() {
                               // Calculate item totals
                               let baseTotal = 0;
                               if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                                // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+                                // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
                                 baseTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
+                              } else if (item.itemSaleType === "Per PCS") {
+                                // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
+                                baseTotal = item.liveWeight * item.price;
                               } else {
                                 // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
                                 baseTotal = (item.liveWeight / 1000) * item.price;
@@ -908,7 +917,12 @@ export default function OrderManagement() {
                               return (
                                 <TableRow key={index}>
                                   <TableCell className="font-medium">{item.name}</TableCell>
-                                  <TableCell>{item.liveWeight}g</TableCell>
+                                  <TableCell>
+                                    {item.itemSaleType === 'Per PCS' && !item.weightPerPCS ? 
+                                      item.liveWeight : 
+                                      `${item.liveWeight}g`
+                                    }
+                                  </TableCell>
                                   <TableCell>{item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG'}</TableCell>
                                   <TableCell>{formatCurrency(item.price)}</TableCell>
                                   <TableCell>{formatCurrency(baseTotal)}</TableCell>
