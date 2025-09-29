@@ -296,7 +296,13 @@ export function setupAuth(app: Express) {
     done(null, user);
   });
 
+  // Self-registration disabled - users can only be created by admins through User Management
   app.post("/api/register", async (req, res, next) => {
+    return res.status(403).json({ 
+      message: "Self-registration is disabled. Please contact an administrator to create your account." 
+    });
+    
+    /* Original registration code - now disabled
     const existingUser = await storage.getUserByUsername(req.body.username);
     if (existingUser) {
       return res.status(400).send("Username already exists");
@@ -311,6 +317,7 @@ export function setupAuth(app: Express) {
       if (err) return next(err);
       res.status(201).json(user);
     });
+    */
   });
 
   app.post("/api/login", passport.authenticate("local"), (req, res) => {
