@@ -10,9 +10,12 @@ import {
   ChevronLeft,
   ChevronRight,
   DollarSign,
-  Scale
+  Scale,
+  Users,
+  Shield
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useQuery } from "@tanstack/react-query";
 
 interface SidebarProps {
   open: boolean;
@@ -28,12 +31,32 @@ const navigationItems = [
   { href: "/order-management", icon: ClipboardList, label: "Order Management" },
   { href: "/expense-management", icon: DollarSign, label: "Expense Management" },
   { href: "/stock-reconciliation", icon: Scale, label: "Stock Reconciliation" },
+];
+
+const adminNavigationItems = [
+  { href: "/user-management", icon: Users, label: "User Management", permission: "view:users" },
+];
+
+const systemNavigationItems = [
   { href: "/reports", icon: BarChart3, label: "Reports" },
   { href: "/settings", icon: Settings, label: "Settings" },
 ];
 
 export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
   const [location] = useLocation();
+  
+  // Fetch user permissions for conditional rendering
+  const { data: userPermissions } = useQuery({
+    queryKey: ["/api/user/permissions"],
+    enabled: true,
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
+  
+  const hasPermission = (permission: string) => {
+    return (userPermissions as any)?.permissions?.includes(permission) || false;
+  };
+  
+  const hasAnyAdminPermission = adminNavigationItems.some(item => hasPermission(item.permission));
 
   return (
     <aside 
@@ -54,7 +77,8 @@ export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
           </div>
         )}
         
-        {navigationItems.slice(0, 6).map((item) => {
+        {/* Main Navigation Items */}
+        {navigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href;
           
@@ -77,9 +101,48 @@ export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
           );
         })}
         
+        {/* Admin Section */}
+        {hasAnyAdminPermission && (
+          <>
+            {(isMobile || open) && <hr className="border-border my-4" />}
+            {(isMobile || open) && (
+              <div className="mb-4">
+                <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 flex items-center space-x-2">
+                  <Shield className="w-3 h-3" />
+                  <span>Admin</span>
+                </h2>
+              </div>
+            )}
+            
+            {adminNavigationItems.filter(item => hasPermission(item.permission)).map((item) => {
+              const Icon = item.icon;
+              const isActive = location === item.href;
+              
+              return (
+                <Link key={item.href} href={item.href} onClick={isMobile ? onClose : undefined}>
+                  <div
+                    className={cn(
+                      "flex items-center space-x-3 px-3 py-3 text-sm font-medium rounded-md transition-colors cursor-pointer",
+                      isActive
+                        ? "text-primary bg-primary/10"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary",
+                      (!open && !isMobile) && "justify-center px-2"
+                    )}
+                    data-testid={`nav-${item.label.toLowerCase().replace(' ', '-')}`}
+                  >
+                    <Icon className={cn("w-5 h-5", (!open && !isMobile) ? "w-6 h-6" : "w-5 h-5")} />
+                    {(open || isMobile) && <span>{item.label}</span>}
+                  </div>
+                </Link>
+              );
+            })}
+          </>
+        )}
+        
+        {/* System Navigation Items */}
         {(isMobile || open) && <hr className="border-border my-4" />}
         
-        {navigationItems.slice(6).map((item) => {
+        {systemNavigationItems.map((item) => {
           const Icon = item.icon;
           const isActive = location === item.href;
           
