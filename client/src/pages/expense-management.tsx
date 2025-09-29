@@ -17,6 +17,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
 import { apiRequest } from "@/lib/queryClient";
 import type { Expense, InsertExpense, ExpenseCategory } from "@shared/schema";
 
@@ -45,6 +46,7 @@ export default function ExpenseManagement() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [showDeleteAllDialog, setShowDeleteAllDialog] = useState(false);
+  const { canView, canCreate, canEdit, canDelete, canExport } = usePermissions();
   
   // Filter states
   const [dateFilter, setDateFilter] = useState("all");
@@ -61,6 +63,7 @@ export default function ExpenseManagement() {
   // Fetch expenses
   const { data: expenses = [], isLoading: expensesLoading } = useQuery<Expense[]>({
     queryKey: ["/api/expenses"],
+    enabled: canView("expenses"), // Only fetch if user can view expenses
   });
 
   // Fetch expense categories
@@ -675,15 +678,17 @@ export default function ExpenseManagement() {
             <Filter className="h-4 w-4 mr-2" />
             Filters
           </Button>
-          <Button
-            variant="outline"
-            onClick={handleExport}
-            disabled={filteredExpenses.length === 0}
-            data-testid="button-export-expenses"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export CSV
-          </Button>
+          <PermissionGuard permission="export:expenses">
+            <Button
+              variant="outline"
+              onClick={handleExport}
+              disabled={filteredExpenses.length === 0}
+              data-testid="button-export-expenses"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export CSV
+            </Button>
+          </PermissionGuard>
           <Button
             variant="outline"
             onClick={handleExampleExport}
@@ -692,21 +697,25 @@ export default function ExpenseManagement() {
             <Download className="h-4 w-4 mr-2" />
             Example CSV
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => document.getElementById("import-input")?.click()}
-            data-testid="button-import-expenses"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import CSV
-          </Button>
-          <Button
-            onClick={() => setShowAddForm(true)}
-            data-testid="button-add-expense"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Add Expense
-          </Button>
+          <PermissionGuard permission="create:expenses">
+            <Button
+              variant="outline"
+              onClick={() => document.getElementById("import-input")?.click()}
+              data-testid="button-import-expenses"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="create:expenses">
+            <Button
+              onClick={() => setShowAddForm(true)}
+              data-testid="button-add-expense"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Add Expense
+            </Button>
+          </PermissionGuard>
         </div>
       </div>
 
@@ -1104,8 +1113,25 @@ export default function ExpenseManagement() {
       )}
 
       {/* Expenses Table */}
-      <Card>
-        <CardHeader>
+      <PermissionGuard 
+        permission="view:expenses"
+        fallback={
+          <Card>
+            <CardContent className="p-8">
+              <div className="text-center">
+                <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+                  <div className="text-yellow-800 dark:text-yellow-200">
+                    <h3 className="font-medium mb-2">Access Restricted</h3>
+                    <p>You don't have permission to view expenses. Please contact your administrator if you need access.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        }
+      >
+        <Card>
+          <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle>Expenses</CardTitle>
@@ -1295,6 +1321,7 @@ export default function ExpenseManagement() {
           )}
         </CardContent>
       </Card>
+      </PermissionGuard>
 
       {/* Import Modal */}
       <Dialog open={importModal} onOpenChange={setImportModal}>

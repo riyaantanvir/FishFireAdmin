@@ -20,6 +20,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
 import type { Order, Item, Payment, InsertPayment } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -93,10 +94,12 @@ export default function DailyOrders() {
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
   const [paymentModal, setPaymentModal] = useState<Order | null>(null);
   const { toast } = useToast();
+  const { canView, canCreate, canDelete } = usePermissions();
 
   // Fetch orders and items
   const { data: allOrders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+    enabled: canView("orders"), // Only fetch if user can view orders
   });
 
   // Filter orders to show only last 2 days for Daily Orders
@@ -104,6 +107,7 @@ export default function DailyOrders() {
 
   const { data: items = [], isLoading: itemsLoading } = useQuery<Item[]>({
     queryKey: ["/api/items"],
+    enabled: canView("items"), // Only fetch if user can view items
   });
 
   // Order state
@@ -919,14 +923,23 @@ export default function DailyOrders() {
 
               {/* Submit Button - Mobile-Responsive */}
               <div className="pt-4">
-                <Button 
-                  type="submit" 
-                  className="w-full h-12 text-base font-semibold"
-                disabled={createOrderMutation.isPending}
-                data-testid="button-submit-order"
-              >
-                Create Order
-              </Button>
+                <PermissionGuard 
+                  permission="create:orders"
+                  fallback={
+                    <div className="text-center text-muted-foreground p-4 border rounded-lg bg-muted/20">
+                      You don't have permission to create orders
+                    </div>
+                  }
+                >
+                  <Button 
+                    type="submit" 
+                    className="w-full h-12 text-base font-semibold"
+                    disabled={createOrderMutation.isPending}
+                    data-testid="button-submit-order"
+                  >
+                    Create Order
+                  </Button>
+                </PermissionGuard>
               </div>
             </form>
           </Form>
@@ -963,11 +976,28 @@ export default function DailyOrders() {
       </Card>
 
       {/* Orders Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Orders ({filteredOrders.length})</CardTitle>
-        </CardHeader>
-        <CardContent>
+      <PermissionGuard 
+        permission="view:orders"
+        fallback={
+          <Card>
+            <CardContent className="p-8">
+              <div className="text-center">
+                <div className="bg-yellow-50 dark:bg-yellow-950 border border-yellow-200 dark:border-yellow-800 rounded-lg p-6">
+                  <div className="text-yellow-800 dark:text-yellow-200">
+                    <h3 className="font-medium mb-2">Access Restricted</h3>
+                    <p>You don't have permission to view orders. Please contact your administrator if you need access.</p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        }
+      >
+        <Card>
+          <CardHeader>
+            <CardTitle>Orders ({filteredOrders.length})</CardTitle>
+          </CardHeader>
+          <CardContent>
           {filteredOrders.length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               {orders.length === 0 ? (
@@ -1022,23 +1052,27 @@ export default function DailyOrders() {
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setViewOrderModal(order)}
-                          data-testid={`button-view-order-${order.id}`}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteOrderMutation.mutate(order.id)}
-                          disabled={deleteOrderMutation.isPending}
-                          data-testid={`button-delete-order-${order.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <PermissionGuard permission="view:orders">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => setViewOrderModal(order)}
+                            data-testid={`button-view-order-${order.id}`}
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                        </PermissionGuard>
+                        <PermissionGuard permission="delete:orders">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteOrderMutation.mutate(order.id)}
+                            disabled={deleteOrderMutation.isPending}
+                            data-testid={`button-delete-order-${order.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </PermissionGuard>
                       </div>
                     </TableCell>
                   </TableRow>
@@ -1048,6 +1082,7 @@ export default function DailyOrders() {
           )}
         </CardContent>
       </Card>
+      </PermissionGuard>
 
       {/* View Order Modal */}
       <Dialog open={!!viewOrderModal} onOpenChange={() => setViewOrderModal(null)}>
@@ -1345,13 +1380,15 @@ export default function DailyOrders() {
                   >
                     Cancel
                   </Button>
-                  <Button
-                    type="submit"
-                    disabled={createPaymentMutation.isPending}
-                    data-testid="button-submit-payment"
-                  >
-                    Record Payment
-                  </Button>
+                  <PermissionGuard permission="create:orders">
+                    <Button
+                      type="submit"
+                      disabled={createPaymentMutation.isPending}
+                      data-testid="button-submit-payment"
+                    >
+                      Record Payment
+                    </Button>
+                  </PermissionGuard>
                 </div>
               </form>
             </Form>

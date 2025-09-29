@@ -13,6 +13,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { type ItemType, type ExpenseCategory, insertItemTypeSchema, insertExpenseCategorySchema } from "@shared/schema";
 import { z } from "zod";
@@ -22,6 +23,7 @@ type ExpenseCategoryFormData = z.infer<typeof insertExpenseCategorySchema>;
 
 export default function SettingsPage() {
   const { toast } = useToast();
+  const { canView, canCreate, canEdit, canDelete } = usePermissions();
   const [isItemTypeDialogOpen, setIsItemTypeDialogOpen] = useState(false);
   const [isExpenseCategoryDialogOpen, setIsExpenseCategoryDialogOpen] = useState(false);
   const [editingItemType, setEditingItemType] = useState<ItemType | null>(null);
@@ -215,13 +217,14 @@ export default function SettingsPage() {
                   Manage categories for your inventory items
                 </CardDescription>
               </div>
-              <Dialog open={isItemTypeDialogOpen} onOpenChange={setIsItemTypeDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button data-testid="button-add-item-type">
-                    <Plus className="h-4 w-4 mr-2" />
-                    Add Item Type
-                  </Button>
-                </DialogTrigger>
+              <PermissionGuard permission="create:items">
+                <Dialog open={isItemTypeDialogOpen} onOpenChange={setIsItemTypeDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button data-testid="button-add-item-type">
+                      <Plus className="h-4 w-4 mr-2" />
+                      Add Item Type
+                    </Button>
+                  </DialogTrigger>
                 <DialogContent className="sm:max-w-[425px]">
                   <DialogHeader>
                     <DialogTitle>
@@ -317,6 +320,7 @@ export default function SettingsPage() {
                   </Form>
                 </DialogContent>
               </Dialog>
+              </PermissionGuard>
             </CardHeader>
             <CardContent>
               <div className="border rounded-lg">

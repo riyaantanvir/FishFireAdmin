@@ -19,6 +19,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
 import type { Item, ItemType } from "@shared/schema";
 import { z } from "zod";
 import {
@@ -63,6 +64,7 @@ export default function ItemManagement() {
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["/api/items"],
+    enabled: canView("items"), // Only fetch if user can view items
   });
 
   const { data: itemTypes = [] } = useQuery<ItemType[]>({
@@ -574,24 +576,28 @@ export default function ItemManagement() {
             <FileText className="h-4 w-4 mr-2" />
             Template
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => document.getElementById('csv-import')?.click()}
-            data-testid="button-import-csv"
-          >
-            <Upload className="h-4 w-4 mr-2" />
-            Import
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={exportToCSV}
-            data-testid="button-export-csv"
-          >
-            <Download className="h-4 w-4 mr-2" />
-            Export
-          </Button>
+          <PermissionGuard permission="create:items">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('csv-import')?.click()}
+              data-testid="button-import-csv"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import
+            </Button>
+          </PermissionGuard>
+          <PermissionGuard permission="export:items">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={exportToCSV}
+              data-testid="button-export-csv"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export
+            </Button>
+          </PermissionGuard>
           <input
             id="csv-import"
             type="file"
@@ -774,14 +780,23 @@ export default function ItemManagement() {
               </div>
 
               {/* Submit Button */}
-              <Button 
-                type="submit" 
-                className="w-full"
-                disabled={createItemMutation.isPending}
-                data-testid="button-save-item"
+              <PermissionGuard 
+                permission="create:items"
+                fallback={
+                  <div className="text-center text-muted-foreground p-4 border rounded-lg bg-muted/20">
+                    You don't have permission to create items
+                  </div>
+                }
               >
-                Save Item
-              </Button>
+                <Button 
+                  type="submit" 
+                  className="w-full"
+                  disabled={createItemMutation.isPending}
+                  data-testid="button-save-item"
+                >
+                  Save Item
+                </Button>
+              </PermissionGuard>
             </form>
           </Form>
         </CardContent>
@@ -878,23 +893,27 @@ export default function ItemManagement() {
                     </TableCell>
                     <TableCell>
                       <div className="flex space-x-2">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleEdit(item)}
-                          data-testid={`button-edit-item-${item.id}`}
-                        >
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => deleteItemMutation.mutate(item.id)}
-                          disabled={deleteItemMutation.isPending}
-                          data-testid={`button-delete-item-${item.id}`}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                        <PermissionGuard permission="edit:items">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEdit(item)}
+                            data-testid={`button-edit-item-${item.id}`}
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                        </PermissionGuard>
+                        <PermissionGuard permission="delete:items">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => deleteItemMutation.mutate(item.id)}
+                            disabled={deleteItemMutation.isPending}
+                            data-testid={`button-delete-item-${item.id}`}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </PermissionGuard>
                       </div>
                     </TableCell>
                   </TableRow>

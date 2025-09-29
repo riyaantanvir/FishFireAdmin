@@ -22,6 +22,7 @@ import {
 import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, CheckCircle, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
 import type { Order, Item } from "@shared/schema";
 
 export default function OrderManagement() {
@@ -38,10 +39,12 @@ export default function OrderManagement() {
   const itemsPerPage = 20;
   
   const { toast } = useToast();
+  const { canView, canCreate, canEdit, canDelete, canExport } = usePermissions();
 
   // Fetch all orders (no date filtering)
   const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
+    enabled: canView("orders"), // Only fetch if user can view orders
   });
 
   // Filter orders based on search term
@@ -630,29 +633,33 @@ export default function OrderManagement() {
               <span className="hidden sm:inline">Template</span>
               <span className="sm:hidden">Template</span>
             </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={exportOrdersToCSV}
-              disabled={orders.length === 0}
-              data-testid="button-export-orders"
-              className="flex-1 sm:flex-none"
-            >
-              <Download className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Export</span>
-              <span className="sm:hidden">Export</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => document.getElementById('import-file-input')?.click()}
-              data-testid="button-import-orders"
-              className="flex-1 sm:flex-none"
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Import</span>
-              <span className="sm:hidden">Import</span>
-            </Button>
+            <PermissionGuard permission="export:orders">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={exportOrdersToCSV}
+                disabled={orders.length === 0}
+                data-testid="button-export-orders"
+                className="flex-1 sm:flex-none"
+              >
+                <Download className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Export</span>
+                <span className="sm:hidden">Export</span>
+              </Button>
+            </PermissionGuard>
+            <PermissionGuard permission="create:orders">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => document.getElementById('import-file-input')?.click()}
+                data-testid="button-import-orders"
+                className="flex-1 sm:flex-none"
+              >
+                <Upload className="h-4 w-4 mr-2" />
+                <span className="hidden sm:inline">Import</span>
+                <span className="sm:hidden">Import</span>
+              </Button>
+            </PermissionGuard>
             <input
               id="import-file-input"
               type="file"
