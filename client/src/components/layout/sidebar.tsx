@@ -45,6 +45,13 @@ const systemNavigationItems = [
 export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
   const [location] = useLocation();
   
+  // Fetch current user
+  const { data: currentUser } = useQuery({
+    queryKey: ["/api/user"],
+    enabled: true,
+    staleTime: 1000 * 60 * 5,
+  });
+  
   // Fetch user permissions for conditional rendering
   const { data: userPermissions } = useQuery({
     queryKey: ["/api/user/permissions"],
@@ -56,7 +63,9 @@ export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
     return (userPermissions as any)?.permissions?.includes(permission) || false;
   };
   
-  const hasAnyAdminPermission = adminNavigationItems.some(item => hasPermission(item.permission));
+  // Check if user is admin by role OR has admin permissions
+  const isAdmin = (currentUser as any)?.role === "admin";
+  const hasAnyAdminPermission = isAdmin || adminNavigationItems.some(item => hasPermission(item.permission));
 
   return (
     <aside 
@@ -114,7 +123,7 @@ export function Sidebar({ open, onToggle, onClose, isMobile }: SidebarProps) {
               </div>
             )}
             
-            {adminNavigationItems.filter(item => hasPermission(item.permission)).map((item) => {
+            {adminNavigationItems.filter(item => isAdmin || hasPermission(item.permission)).map((item) => {
               const Icon = item.icon;
               const isActive = location === item.href;
               
