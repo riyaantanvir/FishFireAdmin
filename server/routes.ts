@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { setupAuth, authenticateJWT } from "./auth";
 import { storage } from "./storage";
-import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema } from "@shared/schema";
+import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema, insertItemTypeSchema, insertExpenseCategorySchema } from "@shared/schema";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -335,6 +335,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(payments);
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch payment reports" });
+    }
+  });
+
+  // Item Types API
+  app.get("/api/item-types", authenticateJWT, async (req, res) => {
+    try {
+      const itemTypes = await storage.getItemTypes();
+      res.json(itemTypes);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch item types" });
+    }
+  });
+
+  app.post("/api/item-types", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertItemTypeSchema.parse(req.body);
+      const itemType = await storage.createItemType(validatedData);
+      res.status(201).json(itemType);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid item type data" });
+    }
+  });
+
+  app.put("/api/item-types/:id", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertItemTypeSchema.partial().parse(req.body);
+      const itemType = await storage.updateItemType(req.params.id, validatedData);
+      if (!itemType) {
+        return res.status(404).json({ message: "Item type not found" });
+      }
+      res.json(itemType);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid item type data" });
+      }
+      res.status(500).json({ message: "Failed to update item type" });
+    }
+  });
+
+  app.delete("/api/item-types/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteItemType(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Item type not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete item type" });
+    }
+  });
+
+  // Expense Categories API
+  app.get("/api/expense-categories", authenticateJWT, async (req, res) => {
+    try {
+      const categories = await storage.getExpenseCategories();
+      res.json(categories);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch expense categories" });
+    }
+  });
+
+  app.post("/api/expense-categories", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertExpenseCategorySchema.parse(req.body);
+      const category = await storage.createExpenseCategory(validatedData);
+      res.status(201).json(category);
+    } catch (error) {
+      res.status(400).json({ message: "Invalid expense category data" });
+    }
+  });
+
+  app.put("/api/expense-categories/:id", authenticateJWT, async (req, res) => {
+    try {
+      const validatedData = insertExpenseCategorySchema.partial().parse(req.body);
+      const category = await storage.updateExpenseCategory(req.params.id, validatedData);
+      if (!category) {
+        return res.status(404).json({ message: "Expense category not found" });
+      }
+      res.json(category);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid expense category data" });
+      }
+      res.status(500).json({ message: "Failed to update expense category" });
+    }
+  });
+
+  app.delete("/api/expense-categories/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteExpenseCategory(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Expense category not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete expense category" });
     }
   });
 

@@ -1,4 +1,4 @@
-import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock, type Payment, type InsertPayment } from "@shared/schema";
+import { type User, type InsertUser, type Order, type InsertOrder, type Item, type InsertItem, type Expense, type InsertExpense, type OpeningStock, type InsertOpeningStock, type ClosingStock, type InsertClosingStock, type Payment, type InsertPayment, type ItemType, type InsertItemType, type ExpenseCategory, type InsertExpenseCategory } from "@shared/schema";
 import { randomUUID } from "crypto";
 import session from "express-session";
 import createMemoryStore from "memorystore";
@@ -48,6 +48,18 @@ export interface IStorage {
   updatePayment(id: string, payment: Partial<Payment>): Promise<Payment | undefined>;
   deletePayment(id: string): Promise<boolean>;
   
+  getItemTypes(): Promise<ItemType[]>;
+  getItemType(id: string): Promise<ItemType | undefined>;
+  createItemType(itemType: InsertItemType): Promise<ItemType>;
+  updateItemType(id: string, itemType: Partial<ItemType>): Promise<ItemType | undefined>;
+  deleteItemType(id: string): Promise<boolean>;
+  
+  getExpenseCategories(): Promise<ExpenseCategory[]>;
+  getExpenseCategory(id: string): Promise<ExpenseCategory | undefined>;
+  createExpenseCategory(expenseCategory: InsertExpenseCategory): Promise<ExpenseCategory>;
+  updateExpenseCategory(id: string, expenseCategory: Partial<ExpenseCategory>): Promise<ExpenseCategory | undefined>;
+  deleteExpenseCategory(id: string): Promise<boolean>;
+  
   sessionStore: session.Store;
 }
 
@@ -59,6 +71,8 @@ export class MemStorage implements IStorage {
   private openingStock: Map<string, OpeningStock>;
   private closingStock: Map<string, ClosingStock>;
   private payments: Map<string, Payment>;
+  private itemTypes: Map<string, ItemType>;
+  private expenseCategories: Map<string, ExpenseCategory>;
   public sessionStore: session.Store;
 
   constructor() {
@@ -69,6 +83,8 @@ export class MemStorage implements IStorage {
     this.openingStock = new Map();
     this.closingStock = new Map();
     this.payments = new Map();
+    this.itemTypes = new Map();
+    this.expenseCategories = new Map();
     
     this.sessionStore = new MemoryStore({
       checkPeriod: 86400000, // 24 hours
@@ -361,6 +377,76 @@ export class MemStorage implements IStorage {
 
   async deletePayment(id: string): Promise<boolean> {
     return this.payments.delete(id);
+  }
+
+  // Item Types methods
+  async getItemTypes(): Promise<ItemType[]> {
+    return Array.from(this.itemTypes.values());
+  }
+
+  async getItemType(id: string): Promise<ItemType | undefined> {
+    return this.itemTypes.get(id);
+  }
+
+  async createItemType(insertItemType: InsertItemType): Promise<ItemType> {
+    const id = randomUUID();
+    const itemType: ItemType = {
+      ...insertItemType,
+      id,
+      description: insertItemType.description || null,
+      isActive: insertItemType.isActive || "true",
+      createdAt: new Date(),
+    };
+    this.itemTypes.set(id, itemType);
+    return itemType;
+  }
+
+  async updateItemType(id: string, itemTypeUpdate: Partial<ItemType>): Promise<ItemType | undefined> {
+    const existingItemType = this.itemTypes.get(id);
+    if (!existingItemType) return undefined;
+    
+    const updatedItemType = { ...existingItemType, ...itemTypeUpdate };
+    this.itemTypes.set(id, updatedItemType);
+    return updatedItemType;
+  }
+
+  async deleteItemType(id: string): Promise<boolean> {
+    return this.itemTypes.delete(id);
+  }
+
+  // Expense Categories methods
+  async getExpenseCategories(): Promise<ExpenseCategory[]> {
+    return Array.from(this.expenseCategories.values());
+  }
+
+  async getExpenseCategory(id: string): Promise<ExpenseCategory | undefined> {
+    return this.expenseCategories.get(id);
+  }
+
+  async createExpenseCategory(insertExpenseCategory: InsertExpenseCategory): Promise<ExpenseCategory> {
+    const id = randomUUID();
+    const expenseCategory: ExpenseCategory = {
+      ...insertExpenseCategory,
+      id,
+      description: insertExpenseCategory.description || null,
+      isActive: insertExpenseCategory.isActive || "true",
+      createdAt: new Date(),
+    };
+    this.expenseCategories.set(id, expenseCategory);
+    return expenseCategory;
+  }
+
+  async updateExpenseCategory(id: string, categoryUpdate: Partial<ExpenseCategory>): Promise<ExpenseCategory | undefined> {
+    const existingCategory = this.expenseCategories.get(id);
+    if (!existingCategory) return undefined;
+    
+    const updatedCategory = { ...existingCategory, ...categoryUpdate };
+    this.expenseCategories.set(id, updatedCategory);
+    return updatedCategory;
+  }
+
+  async deleteExpenseCategory(id: string): Promise<boolean> {
+    return this.expenseCategories.delete(id);
   }
 }
 

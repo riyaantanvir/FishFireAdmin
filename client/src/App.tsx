@@ -15,6 +15,7 @@ import OrderManagement from "@/pages/order-management";
 import ExpenseManagement from "@/pages/expense-management";
 import StockReconciliation from "@/pages/stock-reconciliation";
 import Reports from "@/pages/reports";
+import Settings from "@/pages/settings";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 
@@ -101,10 +102,7 @@ function Router() {
         path="/settings" 
         component={() => (
           <DashboardLayout>
-            <div className="text-center py-12">
-              <h2 className="text-2xl font-bold mb-4">Settings</h2>
-              <p className="text-muted-foreground">Settings feature coming soon!</p>
-            </div>
+            <Settings />
           </DashboardLayout>
         )} 
       />
