@@ -38,13 +38,10 @@ const orderItemSchema = z.object({
   price: z.number().min(0, "Price must be positive"),
   itemSaleType: z.string().optional(), // Per KG or Per PCS
   weightPerPCS: z.number().optional(), // Weight in KG for PCS items
-  discountAmount: z.number().min(0, "Discount amount must be positive").optional(),
-  discountPercentage: z.number().min(0).max(100, "Discount percentage must be between 0-100").optional(),
 });
 
 // Order form schema with order-level discounts
 const orderFormSchema = z.object({
-  customerName: z.string().min(1, "Customer name is required"),
   orderNumber: z.string().min(1, "Order number is required"),
   orderDate: z.string().min(1, "Order date is required"),
   items: z.array(orderItemSchema).min(1, "At least one item is required"),
@@ -117,8 +114,6 @@ export default function DailyOrders() {
     price: 0,
     itemSaleType: "",
     weightPerPCS: 0,
-    discountAmount: 0,
-    discountPercentage: 0,
   }]);
 
   // Order-level discount state
@@ -128,7 +123,6 @@ export default function DailyOrders() {
   const form = useForm<OrderForm>({
     resolver: zodResolver(orderFormSchema),
     defaultValues: {
-      customerName: "",
       orderNumber: `ORD-${Date.now()}`,
       orderDate: new Date().toISOString().split('T')[0],
       items: orderItems,
@@ -140,17 +134,14 @@ export default function DailyOrders() {
   // Auto-calculate totals with order-level discounts
   const [orderSummary, setOrderSummary] = useState({
     subtotal: 0,
-    itemDiscounts: 0,
-    subtotalAfterItemDiscounts: 0,
     orderDiscounts: 0,
     finalTotal: 0,
   });
 
   useEffect(() => {
     let subtotal = 0;
-    let itemDiscounts = 0;
 
-    // Calculate item-level totals and discounts
+    // Calculate item-level totals
     orderItems.forEach(item => {
       if (item.liveWeight && item.price) {
         // Calculate base item total based on sale type
@@ -164,37 +155,22 @@ export default function DailyOrders() {
         }
         
         subtotal += itemTotal;
-
-        // Calculate item discount
-        let itemDiscount = 0;
-        if ((item.discountPercentage || 0) > 0) {
-          itemDiscount = itemTotal * ((item.discountPercentage || 0) / 100);
-        }
-        if ((item.discountAmount || 0) > 0) {
-          itemDiscount += (item.discountAmount || 0);
-        }
-        
-        itemDiscounts += itemDiscount;
       }
     });
-
-    const subtotalAfterItemDiscounts = subtotal - itemDiscounts;
 
     // Calculate order-level discounts
     let orderDiscounts = 0;
     if (orderDiscountPercentage > 0) {
-      orderDiscounts = subtotalAfterItemDiscounts * (orderDiscountPercentage / 100);
+      orderDiscounts = subtotal * (orderDiscountPercentage / 100);
     }
     if (orderDiscountAmount > 0) {
       orderDiscounts += orderDiscountAmount;
     }
 
-    const finalTotal = Math.max(0, subtotalAfterItemDiscounts - orderDiscounts);
+    const finalTotal = Math.max(0, subtotal - orderDiscounts);
 
     setOrderSummary({
       subtotal: Math.round(subtotal * 100) / 100,
-      itemDiscounts: Math.round(itemDiscounts * 100) / 100,
-      subtotalAfterItemDiscounts: Math.round(subtotalAfterItemDiscounts * 100) / 100,
       orderDiscounts: Math.round(orderDiscounts * 100) / 100,
       finalTotal: Math.round(finalTotal * 100) / 100,
     });
@@ -214,8 +190,6 @@ export default function DailyOrders() {
       price: 0,
       itemSaleType: "",
       weightPerPCS: 0,
-      discountAmount: 0,
-      discountPercentage: 0,
     }]);
   };
 
@@ -261,16 +235,6 @@ export default function DailyOrders() {
       total = item.liveWeight * item.price;
     }
     
-    // Apply percentage discount first
-    if ((item.discountPercentage || 0) > 0) {
-      total = total * (1 - (item.discountPercentage || 0) / 100);
-    }
-    
-    // Then apply amount discount
-    if ((item.discountAmount || 0) > 0) {
-      total = Math.max(0, total - (item.discountAmount || 0));
-    }
-    
     return Math.round(total * 100) / 100;
   };
 
@@ -279,7 +243,6 @@ export default function DailyOrders() {
       // Format order data with order-level discounts
       const orderData = {
         orderNumber: data.orderNumber,
-        customerName: data.customerName,
         items: JSON.stringify({
           items: data.items,
           orderDiscountAmount: data.orderDiscountAmount || 0,
@@ -299,7 +262,6 @@ export default function DailyOrders() {
       // Reset form
       const newOrderNumber = `ORD-${Date.now()}`;
       form.reset({
-        customerName: "",
         orderNumber: newOrderNumber,
         orderDate: new Date().toISOString().split('T')[0],
         items: [],
@@ -314,8 +276,6 @@ export default function DailyOrders() {
         price: 0,
         itemSaleType: "",
         weightPerPCS: 0,
-        discountAmount: 0,
-        discountPercentage: 0,
       }]);
 
       setOrderDiscountAmount(0);
@@ -459,7 +419,7 @@ export default function DailyOrders() {
     const paymentData: InsertPayment = {
       orderId: paymentModal.id,
       orderNumber: paymentModal.orderNumber,
-      customerName: paymentModal.customerName,
+      customerName: "Customer", // Default since customer name is no longer collected
       orderTotal: paymentModal.totalAmount,
       totalPaid: totalPaid.toString(),
       cash1000: data.cash1000,
@@ -486,8 +446,7 @@ export default function DailyOrders() {
   };
 
   const filteredOrders = orders.filter(order => {
-    const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         order.customerName.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSearch = order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || order.status === statusFilter;
     return matchesSearch && matchesStatus;
   });
@@ -532,7 +491,6 @@ export default function DailyOrders() {
   const calculateOrderTotal = (itemsString: string) => {
     const orderData = parseOrderData(itemsString);
     let subtotal = 0;
-    let itemDiscounts = 0;
 
     orderData.items.forEach((item: any) => {
       if (item.liveWeight && item.price) {
@@ -544,24 +502,12 @@ export default function DailyOrders() {
           itemTotal = item.liveWeight * item.price;
         }
         subtotal += itemTotal;
-
-        let itemDiscount = 0;
-        if (item.discountPercentage > 0) {
-          itemDiscount = itemTotal * (item.discountPercentage / 100);
-        }
-        if (item.discountAmount > 0) {
-          itemDiscount += item.discountAmount;
-        }
-        
-        itemDiscounts += itemDiscount;
       }
     });
 
-    const subtotalAfterItemDiscounts = subtotal - itemDiscounts;
-    
     let orderDiscounts = 0;
     if (orderData.orderDiscountPercentage > 0) {
-      orderDiscounts = subtotalAfterItemDiscounts * (orderData.orderDiscountPercentage / 100);
+      orderDiscounts = subtotal * (orderData.orderDiscountPercentage / 100);
     }
     if (orderData.orderDiscountAmount > 0) {
       orderDiscounts += orderData.orderDiscountAmount;
@@ -569,10 +515,8 @@ export default function DailyOrders() {
 
     return {
       subtotal: Math.round(subtotal * 100) / 100,
-      itemDiscounts: Math.round(itemDiscounts * 100) / 100,
-      subtotalAfterItemDiscounts: Math.round(subtotalAfterItemDiscounts * 100) / 100,
       orderDiscounts: Math.round(orderDiscounts * 100) / 100,
-      finalTotal: Math.round((subtotalAfterItemDiscounts - orderDiscounts) * 100) / 100,
+      finalTotal: Math.round((subtotal - orderDiscounts) * 100) / 100,
     };
   };
 
@@ -603,25 +547,7 @@ export default function DailyOrders() {
             <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
               
               {/* Order Header */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <FormField
-                  control={form.control}
-                  name="customerName"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Customer Name</FormLabel>
-                      <FormControl>
-                        <Input 
-                          placeholder="Enter customer name"
-                          data-testid="input-customer-name"
-                          {...field} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-muted/50 rounded-lg">
                 <FormField
                   control={form.control}
                   name="orderNumber"
@@ -686,8 +612,6 @@ export default function DailyOrders() {
                         <TableHead>Weight/PCS</TableHead>
                         <TableHead>Live Weight (gm)</TableHead>
                         <TableHead>Price/KG</TableHead>
-                        <TableHead>Discount Amount</TableHead>
-                        <TableHead>Discount %</TableHead>
                         <TableHead>Row Total</TableHead>
                         <TableHead>Actions</TableHead>
                       </TableRow>
@@ -768,33 +692,6 @@ export default function DailyOrders() {
                             />
                           </TableCell>
                           
-                          {/* Discount Amount */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              value={item.discountAmount || 0}
-                              onChange={(e) => updateOrderItem(index, 'discountAmount', Number(e.target.value) || 0)}
-                              data-testid={`input-discount-amount-${index}`}
-                              className="w-24"
-                            />
-                          </TableCell>
-                          
-                          {/* Discount Percentage */}
-                          <TableCell>
-                            <Input
-                              type="number"
-                              step="0.1"
-                              min="0"
-                              max="100"
-                              value={item.discountPercentage || 0}
-                              onChange={(e) => updateOrderItem(index, 'discountPercentage', Number(e.target.value) || 0)}
-                              data-testid={`input-discount-percentage-${index}`}
-                              className="w-20"
-                            />
-                          </TableCell>
-                          
                           {/* Row Total */}
                           <TableCell className="font-medium">
                             TK {getRowTotal(item).toFixed(2)}
@@ -853,18 +750,10 @@ export default function DailyOrders() {
               </div>
 
               {/* Order Summary */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 p-4 bg-muted/50 rounded-lg">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
                 <div>
                   <Label>Subtotal</Label>
                   <div className="text-lg font-medium">TK {orderSummary.subtotal.toFixed(2)}</div>
-                </div>
-                <div>
-                  <Label>Item Discounts</Label>
-                  <div className="text-lg font-medium text-red-600">-TK {orderSummary.itemDiscounts.toFixed(2)}</div>
-                </div>
-                <div>
-                  <Label>After Item Discounts</Label>
-                  <div className="text-lg font-medium">TK {orderSummary.subtotalAfterItemDiscounts.toFixed(2)}</div>
                 </div>
                 <div>
                   <Label>Order Discounts</Label>
@@ -897,7 +786,7 @@ export default function DailyOrders() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
               <Input
-                placeholder="Search orders by number or customer name..."
+                placeholder="Search orders by number..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10"
@@ -941,7 +830,6 @@ export default function DailyOrders() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Order Number</TableHead>
-                  <TableHead>Customer Name</TableHead>
                   <TableHead>Order Date</TableHead>
                   <TableHead>Final Total</TableHead>
                   <TableHead>Payment Status</TableHead>
@@ -952,7 +840,6 @@ export default function DailyOrders() {
                 {filteredOrders.map((order) => (
                   <TableRow key={order.id} data-testid={`order-row-${order.id}`}>
                     <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                    <TableCell>{order.customerName}</TableCell>
                     <TableCell>
                       {order.orderDate ? new Date(order.orderDate).toLocaleDateString() : 
                        order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
@@ -1021,10 +908,6 @@ export default function DailyOrders() {
             <div className="space-y-6">
               {/* Order Header */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-muted/50 rounded-lg">
-                <div>
-                  <Label>Customer Name</Label>
-                  <div className="font-medium">{viewOrderModal.customerName}</div>
-                </div>
                 <div>
                   <Label>Order Number</Label>
                   <div className="font-medium">{viewOrderModal.orderNumber}</div>
@@ -1100,18 +983,10 @@ export default function DailyOrders() {
                   const totals = calculateOrderTotal(viewOrderModal.items);
                   const orderData = parseOrderData(viewOrderModal.items);
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                       <div>
                         <Label>Subtotal</Label>
                         <div className="text-lg font-medium">TK {totals.subtotal.toFixed(2)}</div>
-                      </div>
-                      <div>
-                        <Label>Item Discounts</Label>
-                        <div className="text-lg font-medium text-red-600">-TK {totals.itemDiscounts.toFixed(2)}</div>
-                      </div>
-                      <div>
-                        <Label>After Item Discounts</Label>
-                        <div className="text-lg font-medium">TK {totals.subtotalAfterItemDiscounts.toFixed(2)}</div>
                       </div>
                       <div>
                         <Label>Order Discounts</Label>
@@ -1154,10 +1029,6 @@ export default function DailyOrders() {
                 {/* Order Summary */}
                 <div className="p-4 bg-muted/50 rounded-lg">
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label>Customer</Label>
-                      <div className="font-medium">{paymentModal.customerName}</div>
-                    </div>
                     <div>
                       <Label>Order Number</Label>
                       <div className="font-medium">{paymentModal.orderNumber}</div>
