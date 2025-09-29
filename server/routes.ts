@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, authenticateJWT, requireRole, requirePermission } from "./auth";
+import { setupAuth, authenticateJWT, requireRole, requirePermission, hashPassword } from "./auth";
 import { storage } from "./storage";
 import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema, insertItemTypeSchema, insertExpenseCategorySchema, insertUserSchema, insertRoleSchema, insertPermissionSchema, insertUserRoleSchema, insertRolePermissionSchema } from "@shared/schema";
 
@@ -817,6 +817,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/admin/users", authenticateJWT, requirePermission("create:users"), async (req, res) => {
     try {
       const validatedData = insertUserSchema.parse(req.body);
+      
+      // Hash the password before storing
+      if (validatedData.password) {
+        validatedData.password = await hashPassword(validatedData.password);
+      }
+      
       const user = await storage.createUser(validatedData);
       const safeUser = sanitizeUser(user);
       res.status(201).json(safeUser);
@@ -829,6 +835,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.put("/api/admin/users/:id", authenticateJWT, requirePermission("edit:users"), async (req, res) => {
     try {
       const validatedData = insertUserSchema.partial().parse(req.body);
+      
+      // Hash the password if it's being updated
+      if (validatedData.password) {
+        validatedData.password = await hashPassword(validatedData.password);
+      }
+      
       const user = await storage.updateUser(req.params.id, validatedData);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
