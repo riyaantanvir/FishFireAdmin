@@ -61,6 +61,7 @@ export default function ItemManagement() {
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [editingItem, setEditingItem] = useState<Item | null>(null);
   const { toast } = useToast();
+  const { canView, canCreate, canEdit, canDelete, canExport } = usePermissions();
 
   const { data: items = [], isLoading } = useQuery<Item[]>({
     queryKey: ["/api/items"],
