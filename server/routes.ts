@@ -1,8 +1,24 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { setupAuth, authenticateJWT } from "./auth";
+import { setupAuth, authenticateJWT, requireRole, requirePermission } from "./auth";
 import { storage } from "./storage";
-import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema, insertItemTypeSchema, insertExpenseCategorySchema } from "@shared/schema";
+import { insertOrderSchema, insertItemSchema, insertExpenseSchema, insertOpeningStockSchema, insertClosingStockSchema, insertPaymentSchema, insertItemTypeSchema, insertExpenseCategorySchema, insertUserSchema, insertRoleSchema, insertPermissionSchema, insertUserRoleSchema, insertRolePermissionSchema } from "@shared/schema";
+
+// Helper function to sanitize user objects by removing sensitive fields
+function sanitizeUser(user: any) {
+  const { 
+    password, 
+    passwordHash, 
+    resetToken, 
+    resetTokenExpiry, 
+    ...safeUser 
+  } = user;
+  return safeUser;
+}
+
+function sanitizeUsers(users: any[]) {
+  return users.map(sanitizeUser);
+}
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Setup authentication routes
@@ -431,6 +447,306 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete expense category" });
+    }
+  });
+
+  // Admin API Routes - User Management
+  app.get("/api/admin/users", authenticateJWT, requirePermission("view:users"), async (req, res) => {
+    try {
+      const users = await storage.getAllUsers();
+      const safeUsers = sanitizeUsers(users);
+      res.json(safeUsers);
+    } catch (error) {
+      console.error('Get users error:', error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.post("/api/admin/users", authenticateJWT, requirePermission("create:users"), async (req, res) => {
+    try {
+      const validatedData = insertUserSchema.parse(req.body);
+      const user = await storage.createUser(validatedData);
+      const safeUser = sanitizeUser(user);
+      res.status(201).json(safeUser);
+    } catch (error) {
+      console.error('Create user error:', error);
+      res.status(400).json({ message: "Invalid user data" });
+    }
+  });
+
+  app.put("/api/admin/users/:id", authenticateJWT, requirePermission("edit:users"), async (req, res) => {
+    try {
+      const validatedData = insertUserSchema.partial().parse(req.body);
+      const user = await storage.updateUser(req.params.id, validatedData);
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      const safeUser = sanitizeUser(user);
+      res.json(safeUser);
+    } catch (error) {
+      console.error('Update user error:', error);
+      res.status(400).json({ message: "Failed to update user" });
+    }
+  });
+
+  app.delete("/api/admin/users/:id", authenticateJWT, requirePermission("delete:users"), async (req, res) => {
+    try {
+      // Prevent deletion of current user
+      if (req.params.id === req.user?.id) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+      
+      const deleted = await storage.deleteUser(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Delete user error:', error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
+  // User Role Assignment
+  app.get("/api/admin/users/:id/roles", authenticateJWT, requirePermission("view:users"), async (req, res) => {
+    try {
+      const userRoles = await storage.getUserRoles(req.params.id);
+      const roles = await storage.getRoles();
+      const userRoleData = userRoles.map(ur => {
+        const role = roles.find(r => r.id === ur.roleId);
+        return {
+          id: ur.id,
+          roleId: ur.roleId,
+          roleName: role?.name,
+          assignedBy: ur.assignedBy,
+          createdAt: ur.createdAt
+        };
+      });
+      res.json(userRoleData);
+    } catch (error) {
+      console.error('Get user roles error:', error);
+      res.status(500).json({ message: "Failed to fetch user roles" });
+    }
+  });
+
+  app.post("/api/admin/users/:id/roles", authenticateJWT, requirePermission("edit:users"), async (req, res) => {
+    try {
+      const validatedData = insertUserRoleSchema.parse({
+        ...req.body,
+        userId: req.params.id,
+        assignedBy: req.user?.id
+      });
+      const userRole = await storage.assignRoleToUser(validatedData);
+      res.status(201).json(userRole);
+    } catch (error) {
+      console.error('Assign role error:', error);
+      res.status(400).json({ message: "Failed to assign role" });
+    }
+  });
+
+  app.delete("/api/admin/users/:userId/roles/:roleId", authenticateJWT, requirePermission("edit:users"), async (req, res) => {
+    try {
+      const deleted = await storage.removeRoleFromUser(req.params.userId, req.params.roleId);
+      if (!deleted) {
+        return res.status(404).json({ message: "User role assignment not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Remove role error:', error);
+      res.status(500).json({ message: "Failed to remove role" });
+    }
+  });
+
+  // Admin API Routes - Role Management
+  app.get("/api/admin/roles", authenticateJWT, requirePermission("view:roles"), async (req, res) => {
+    try {
+      const roles = await storage.getRoles();
+      res.json(roles);
+    } catch (error) {
+      console.error('Get roles error:', error);
+      res.status(500).json({ message: "Failed to fetch roles" });
+    }
+  });
+
+  app.post("/api/admin/roles", authenticateJWT, requirePermission("create:roles"), async (req, res) => {
+    try {
+      const validatedData = insertRoleSchema.parse(req.body);
+      const role = await storage.createRole(validatedData);
+      res.status(201).json(role);
+    } catch (error) {
+      console.error('Create role error:', error);
+      res.status(400).json({ message: "Invalid role data" });
+    }
+  });
+
+  app.put("/api/admin/roles/:id", authenticateJWT, requirePermission("edit:roles"), async (req, res) => {
+    try {
+      const validatedData = insertRoleSchema.partial().parse(req.body);
+      const role = await storage.updateRole(req.params.id, validatedData);
+      if (!role) {
+        return res.status(404).json({ message: "Role not found" });
+      }
+      res.json(role);
+    } catch (error) {
+      console.error('Update role error:', error);
+      res.status(400).json({ message: "Failed to update role" });
+    }
+  });
+
+  app.delete("/api/admin/roles/:id", authenticateJWT, requirePermission("delete:roles"), async (req, res) => {
+    try {
+      const deleted = await storage.deleteRole(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Role not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Delete role error:', error);
+      res.status(500).json({ message: "Failed to delete role" });
+    }
+  });
+
+  // Role Permission Assignment
+  app.get("/api/admin/roles/:id/permissions", authenticateJWT, requirePermission("view:roles"), async (req, res) => {
+    try {
+      const rolePermissions = await storage.getRolePermissions(req.params.id);
+      const permissions = await storage.getPermissions();
+      const rolePermissionData = rolePermissions.map(rp => {
+        const permission = permissions.find(p => p.id === rp.permissionId);
+        return {
+          id: rp.id,
+          permissionId: rp.permissionId,
+          permissionName: permission?.name,
+          permissionDescription: permission?.description,
+          resource: permission?.resource,
+          action: permission?.action,
+          createdAt: rp.createdAt
+        };
+      });
+      res.json(rolePermissionData);
+    } catch (error) {
+      console.error('Get role permissions error:', error);
+      res.status(500).json({ message: "Failed to fetch role permissions" });
+    }
+  });
+
+  app.post("/api/admin/roles/:id/permissions", authenticateJWT, requirePermission("edit:roles"), async (req, res) => {
+    try {
+      const validatedData = insertRolePermissionSchema.parse({
+        ...req.body,
+        roleId: req.params.id
+      });
+      const rolePermission = await storage.assignPermissionToRole(validatedData);
+      res.status(201).json(rolePermission);
+    } catch (error) {
+      console.error('Assign permission error:', error);
+      res.status(400).json({ message: "Failed to assign permission" });
+    }
+  });
+
+  app.delete("/api/admin/roles/:roleId/permissions/:permissionId", authenticateJWT, requirePermission("edit:roles"), async (req, res) => {
+    try {
+      const deleted = await storage.removePermissionFromRole(req.params.roleId, req.params.permissionId);
+      if (!deleted) {
+        return res.status(404).json({ message: "Role permission assignment not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Remove permission error:', error);
+      res.status(500).json({ message: "Failed to remove permission" });
+    }
+  });
+
+  // Admin API Routes - Permission Management
+  app.get("/api/admin/permissions", authenticateJWT, requirePermission("view:roles"), async (req, res) => {
+    try {
+      const permissions = await storage.getPermissions();
+      res.json(permissions);
+    } catch (error) {
+      console.error('Get permissions error:', error);
+      res.status(500).json({ message: "Failed to fetch permissions" });
+    }
+  });
+
+  app.post("/api/admin/permissions", authenticateJWT, requirePermission("create:roles"), async (req, res) => {
+    try {
+      const validatedData = insertPermissionSchema.parse(req.body);
+      const permission = await storage.createPermission(validatedData);
+      res.status(201).json(permission);
+    } catch (error) {
+      console.error('Create permission error:', error);
+      res.status(400).json({ message: "Invalid permission data" });
+    }
+  });
+
+  app.put("/api/admin/permissions/:id", authenticateJWT, requirePermission("edit:roles"), async (req, res) => {
+    try {
+      const validatedData = insertPermissionSchema.partial().parse(req.body);
+      const permission = await storage.updatePermission(req.params.id, validatedData);
+      if (!permission) {
+        return res.status(404).json({ message: "Permission not found" });
+      }
+      res.json(permission);
+    } catch (error) {
+      console.error('Update permission error:', error);
+      res.status(400).json({ message: "Failed to update permission" });
+    }
+  });
+
+  app.delete("/api/admin/permissions/:id", authenticateJWT, requirePermission("delete:roles"), async (req, res) => {
+    try {
+      const deleted = await storage.deletePermission(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Permission not found" });
+      }
+      res.sendStatus(204);
+    } catch (error) {
+      console.error('Delete permission error:', error);
+      res.status(500).json({ message: "Failed to delete permission" });
+    }
+  });
+
+  // Admin API Routes - Audit Logs
+  app.get("/api/admin/audit-logs", authenticateJWT, requireRole("Admin"), async (req, res) => {
+    try {
+      const filters = {
+        userId: req.query.userId as string,
+        action: req.query.action as string,
+        resource: req.query.resource as string,
+        dateFrom: req.query.dateFrom as string,
+        dateTo: req.query.dateTo as string,
+        limit: req.query.limit ? parseInt(req.query.limit as string) : 50,
+        offset: req.query.offset ? parseInt(req.query.offset as string) : 0
+      };
+
+      // Remove undefined values
+      Object.keys(filters).forEach(key => {
+        if (filters[key as keyof typeof filters] === undefined) {
+          delete filters[key as keyof typeof filters];
+        }
+      });
+
+      const { logs, total } = await storage.getAuditLogs(filters);
+      res.json({ logs, total, filters });
+    } catch (error) {
+      console.error('Get audit logs error:', error);
+      res.status(500).json({ message: "Failed to fetch audit logs" });
+    }
+  });
+
+  // Get current user's permissions (for UI controls)
+  app.get("/api/user/permissions", authenticateJWT, async (req, res) => {
+    try {
+      if (!req.user?.id) {
+        return res.status(401).json({ message: "User not authenticated" });
+      }
+      
+      const permissions = await storage.getUserPermissions(req.user.id);
+      const permissionNames = permissions.map(p => p.name);
+      res.json({ permissions: permissionNames });
+    } catch (error) {
+      console.error('Get user permissions error:', error);
+      res.status(500).json({ message: "Failed to fetch user permissions" });
     }
   });
 
