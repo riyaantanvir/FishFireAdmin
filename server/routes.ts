@@ -38,6 +38,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertOrderSchema.parse(req.body);
       const order = await storage.createOrder(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created order #${order.id} - ${order.itemName} (${order.quantity} ${order.unit})`,
+          resource: 'order',
+          resourceId: order.id,
+          details: { orderData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for order creation:', auditError);
+      }
+      
       res.status(201).json(order);
     } catch (error) {
       console.error('Create order error:', error);
@@ -51,6 +65,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!order) {
         return res.status(404).json({ message: "Order not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated order #${order.id} - ${order.itemName}`,
+          resource: 'order',
+          resourceId: order.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for order update:', auditError);
+      }
+      
       res.json(order);
     } catch (error) {
       res.status(400).json({ message: "Failed to update order" });
@@ -63,6 +91,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Order not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted order #${req.params.id}`,
+          resource: 'order',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for order deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete order" });
@@ -78,6 +119,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
       
       const deletedCount = await storage.clearAllOrders();
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Bulk deleted all orders (${deletedCount} orders)`,
+          resource: 'order',
+          details: { deletedCount }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for bulk order deletion:', auditError);
+      }
+      
       res.json({ message: `Deleted ${deletedCount} orders`, count: deletedCount });
     } catch (error) {
       console.error('Clear orders error:', error);
@@ -99,6 +153,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertItemSchema.parse(req.body);
       const item = await storage.createItem(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created item: ${item.name} (${item.unit})`,
+          resource: 'item',
+          resourceId: item.id,
+          details: { itemData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item creation:', auditError);
+      }
+      
       res.status(201).json(item);
     } catch (error) {
       res.status(400).json({ message: "Invalid item data" });
@@ -111,6 +179,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!item) {
         return res.status(404).json({ message: "Item not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated item: ${item.name}`,
+          resource: 'item',
+          resourceId: item.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item update:', auditError);
+      }
+      
       res.json(item);
     } catch (error) {
       res.status(400).json({ message: "Failed to update item" });
@@ -123,6 +205,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Item not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted item #${req.params.id}`,
+          resource: 'item',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete item" });
@@ -143,6 +238,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertExpenseSchema.parse(req.body);
       const expense = await storage.createExpense(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created expense: ${expense.category} - $${expense.amount} (${expense.description})`,
+          resource: 'expense',
+          resourceId: expense.id,
+          details: { expenseData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense creation:', auditError);
+      }
+      
       res.status(201).json(expense);
     } catch (error) {
       res.status(400).json({ message: "Invalid expense data" });
@@ -155,6 +264,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!expense) {
         return res.status(404).json({ message: "Expense not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated expense: ${expense.category} - $${expense.amount}`,
+          resource: 'expense',
+          resourceId: expense.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense update:', auditError);
+      }
+      
       res.json(expense);
     } catch (error) {
       res.status(400).json({ message: "Failed to update expense" });
@@ -167,6 +290,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Expense not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted expense #${req.params.id}`,
+          resource: 'expense',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete expense" });
@@ -177,6 +313,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/expenses", authenticateJWT, async (req, res) => {
     try {
       await storage.deleteAllExpenses();
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: 'Bulk deleted all expenses',
+          resource: 'expense'
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for bulk expense deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete all expenses" });
@@ -197,6 +345,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertOpeningStockSchema.parse(req.body);
       const openingStock = await storage.createOpeningStock(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created opening stock: ${openingStock.itemName} - ${openingStock.quantity} ${openingStock.unit} (${openingStock.date})`,
+          resource: 'opening_stock',
+          resourceId: openingStock.id,
+          details: { stockData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for opening stock creation:', auditError);
+      }
+      
       res.status(201).json(openingStock);
     } catch (error) {
       res.status(400).json({ message: "Invalid opening stock data" });
@@ -209,6 +371,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!openingStock) {
         return res.status(404).json({ message: "Opening stock entry not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated opening stock: ${openingStock.itemName} - ${openingStock.quantity} ${openingStock.unit}`,
+          resource: 'opening_stock',
+          resourceId: openingStock.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for opening stock update:', auditError);
+      }
+      
       res.json(openingStock);
     } catch (error) {
       res.status(400).json({ message: "Failed to update opening stock" });
@@ -221,6 +397,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Opening stock entry not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted opening stock entry #${req.params.id}`,
+          resource: 'opening_stock',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for opening stock deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete opening stock" });
@@ -241,6 +430,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertClosingStockSchema.parse(req.body);
       const closingStock = await storage.createClosingStock(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created closing stock: ${closingStock.itemName} - ${closingStock.quantity} ${closingStock.unit} (${closingStock.date})`,
+          resource: 'closing_stock',
+          resourceId: closingStock.id,
+          details: { stockData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for closing stock creation:', auditError);
+      }
+      
       res.status(201).json(closingStock);
     } catch (error) {
       res.status(400).json({ message: "Invalid closing stock data" });
@@ -253,6 +456,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!closingStock) {
         return res.status(404).json({ message: "Closing stock entry not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated closing stock: ${closingStock.itemName} - ${closingStock.quantity} ${closingStock.unit}`,
+          resource: 'closing_stock',
+          resourceId: closingStock.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for closing stock update:', auditError);
+      }
+      
       res.json(closingStock);
     } catch (error) {
       res.status(400).json({ message: "Failed to update closing stock" });
@@ -265,6 +482,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Closing stock entry not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted closing stock entry #${req.params.id}`,
+          resource: 'closing_stock',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for closing stock deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete closing stock" });
@@ -310,6 +540,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Update order payment status
       await storage.updateOrder(validatedData.orderId, { paymentStatus: "Paid" });
       
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created payment: $${payment.amount} via ${payment.method} for order #${payment.orderId}`,
+          resource: 'payment',
+          resourceId: payment.id,
+          details: { paymentData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for payment creation:', auditError);
+      }
+      
       res.status(201).json(payment);
     } catch (error) {
       res.status(400).json({ message: "Invalid payment data" });
@@ -322,6 +565,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!payment) {
         return res.status(404).json({ message: "Payment not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated payment: $${payment.amount} via ${payment.method}`,
+          resource: 'payment',
+          resourceId: payment.id,
+          details: { updates: req.body }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for payment update:', auditError);
+      }
+      
       res.json(payment);
     } catch (error) {
       res.status(400).json({ message: "Failed to update payment" });
@@ -334,6 +591,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Payment not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted payment #${req.params.id}`,
+          resource: 'payment',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for payment deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete payment" });
@@ -368,6 +638,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertItemTypeSchema.parse(req.body);
       const itemType = await storage.createItemType(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created item type: ${itemType.name} (${itemType.unit})`,
+          resource: 'item_type',
+          resourceId: itemType.id,
+          details: { itemTypeData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item type creation:', auditError);
+      }
+      
       res.status(201).json(itemType);
     } catch (error) {
       res.status(400).json({ message: "Invalid item type data" });
@@ -381,6 +665,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!itemType) {
         return res.status(404).json({ message: "Item type not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated item type: ${itemType.name} (${itemType.unit})`,
+          resource: 'item_type',
+          resourceId: itemType.id,
+          details: { updates: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item type update:', auditError);
+      }
+      
       res.json(itemType);
     } catch (error) {
       if (error instanceof Error && error.name === 'ZodError') {
@@ -396,6 +694,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Item type not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted item type #${req.params.id}`,
+          resource: 'item_type',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for item type deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete item type" });
@@ -416,6 +727,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertExpenseCategorySchema.parse(req.body);
       const category = await storage.createExpenseCategory(validatedData);
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Created expense category: ${category.name}`,
+          resource: 'expense_category',
+          resourceId: category.id,
+          details: { categoryData: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense category creation:', auditError);
+      }
+      
       res.status(201).json(category);
     } catch (error) {
       res.status(400).json({ message: "Invalid expense category data" });
@@ -429,6 +754,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!category) {
         return res.status(404).json({ message: "Expense category not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Updated expense category: ${category.name}`,
+          resource: 'expense_category',
+          resourceId: category.id,
+          details: { updates: validatedData }
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense category update:', auditError);
+      }
+      
       res.json(category);
     } catch (error) {
       if (error instanceof Error && error.name === 'ZodError') {
@@ -444,6 +783,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!deleted) {
         return res.status(404).json({ message: "Expense category not found" });
       }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted expense category #${req.params.id}`,
+          resource: 'expense_category',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for expense category deletion:', auditError);
+      }
+      
       res.sendStatus(204);
     } catch (error) {
       res.status(500).json({ message: "Failed to delete expense category" });
