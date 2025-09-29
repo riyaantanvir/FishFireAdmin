@@ -147,11 +147,11 @@ export default function DailyOrders() {
         // Calculate base item total based on sale type
         let itemTotal = 0;
         if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-          // For Per PCS: Total = (LiveWeight in PCS * WeightPerPCS) * PricePerKG
-          itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+          // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+          itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
         } else {
-          // For Per KG: Total = LiveWeight in KG * PricePerKG
-          itemTotal = item.liveWeight * item.price;
+          // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
+          itemTotal = (item.liveWeight / 1000) * item.price;
         }
         
         subtotal += itemTotal;
@@ -497,9 +497,11 @@ export default function DailyOrders() {
         // Calculate total based on sale type
         let itemTotal = 0;
         if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-          itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+          // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+          itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
         } else {
-          itemTotal = item.liveWeight * item.price;
+          // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
+          itemTotal = (item.liveWeight / 1000) * item.price;
         }
         subtotal += itemTotal;
       }

@@ -46,7 +46,6 @@ export default function OrderManagement() {
 
   // Filter orders based on search term
   const filteredOrders = orders.filter(order =>
-    order.customerName.toLowerCase().includes(searchTerm.toLowerCase()) ||
     order.orderNumber.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -133,7 +132,6 @@ export default function OrderManagement() {
   const exportOrdersToCSV = () => {
     const headers = [
       'Order Number',
-      'Customer Name', 
       'Order Date',
       'Item Name',
       'Live Weight',
@@ -215,7 +213,6 @@ export default function OrderManagement() {
         
         const row = [
           order.orderNumber,
-          order.customerName,
           order.orderDate,
           item.name || '',
           item.liveWeight || 0,
@@ -248,7 +245,6 @@ export default function OrderManagement() {
   const downloadTemplate = () => {
     const headers = [
       'Order Number',
-      'Customer Name', 
       'Order Date',
       'Item Name',
       'Live Weight',
@@ -261,9 +257,9 @@ export default function OrderManagement() {
     ];
 
     const sampleData = [
-      'ORD-001,John Doe,2025-09-28,Salmon Fish,2.5,KG,15.00,37.50,2.00,5,33.63',
-      'ORD-001,John Doe,2025-09-28,Chicken Breast,3,PCS,8.00,24.00,0,0,21.60',
-      'ORD-002,Jane Smith,2025-09-28,Tuna Fish,1.8,KG,20.00,36.00,0,10,32.40'
+      'ORD-001,2025-09-28,Salmon Fish,2500,KG,15.00,37.50,2.00,5,33.63',
+      'ORD-001,2025-09-28,Chicken Breast,3000,PCS,8.00,24.00,0,0,21.60',
+      'ORD-002,2025-09-28,Tuna Fish,1800,KG,20.00,36.00,0,10,32.40'
     ];
 
     const csvRows = [headers.map(escapeCSVField).join(','), ...sampleData];
@@ -332,10 +328,10 @@ export default function OrderManagement() {
       }
 
       const headers = parseCSVLine(lines[0]);
-      const expectedHeaders = ['Order Number', 'Customer Name', 'Order Date', 'Item Name', 'Live Weight', 'Unit Type', 'Unit Price', 'Item Total', 'Discount Amount', 'Discount %', 'Final Row Total'];
+      const expectedHeaders = ['Order Number', 'Order Date', 'Item Name', 'Live Weight', 'Unit Type', 'Unit Price', 'Item Total', 'Discount Amount', 'Discount %', 'Final Row Total'];
       
       // Check if headers match expected format (only these are required)
-      const requiredHeaders = ['Order Number', 'Customer Name', 'Order Date', 'Item Name'];
+      const requiredHeaders = ['Order Number', 'Order Date', 'Item Name'];
       const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
       
       if (missingHeaders.length > 0) {
@@ -364,11 +360,6 @@ export default function OrderManagement() {
           
           if (!rowData['Order Number'] || !rowData['Order Number'].trim()) {
             errors.push(`Row ${i + 1}: Missing Order Number`);
-            hasError = true;
-          }
-          
-          if (!rowData['Customer Name'] || !rowData['Customer Name'].trim()) {
-            errors.push(`Row ${i + 1}: Missing Customer Name`);
             hasError = true;
           }
           
@@ -427,7 +418,6 @@ export default function OrderManagement() {
         if (!orderGroups[orderNumber]) {
           orderGroups[orderNumber] = {
             orderNumber,
-            customerName: row['Customer Name'],
             orderDate: row['Order Date'],
             items: [],
           };
@@ -485,9 +475,11 @@ export default function OrderManagement() {
           order.items.forEach((item: any) => {
             let itemTotal = 0;
             if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-              itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
+              // For Per PCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
+              itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
             } else {
-              itemTotal = item.liveWeight * item.price;
+              // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
+              itemTotal = (item.liveWeight / 1000) * item.price;
             }
             subtotal += itemTotal;
             
@@ -505,7 +497,6 @@ export default function OrderManagement() {
 
           const orderData = {
             orderNumber: order.orderNumber,
-            customerName: order.customerName,
             orderDate: order.orderDate,
             items: JSON.stringify({
               items: order.items,
@@ -691,7 +682,6 @@ export default function OrderManagement() {
                   <TableHeader>
                     <TableRow>
                       <TableHead>Order Number</TableHead>
-                      <TableHead>Customer Name</TableHead>
                       <TableHead>Order Date</TableHead>
                       <TableHead>Final Total</TableHead>
                       <TableHead>Status</TableHead>
@@ -703,9 +693,6 @@ export default function OrderManagement() {
                       <TableRow key={order.id}>
                         <TableCell className="font-medium" data-testid={`text-order-number-${order.id}`}>
                           {order.orderNumber}
-                        </TableCell>
-                        <TableCell data-testid={`text-customer-name-${order.id}`}>
-                          {order.customerName}
                         </TableCell>
                         <TableCell data-testid={`text-order-date-${order.id}`}>
                           {formatDate(order.orderDate)}
@@ -1041,7 +1028,6 @@ export default function OrderManagement() {
                       <TableHeader>
                         <TableRow>
                           <TableHead>Order Number</TableHead>
-                          <TableHead>Customer Name</TableHead>
                           <TableHead>Order Date</TableHead>
                           <TableHead>Items Count</TableHead>
                           <TableHead>Estimated Total</TableHead>
@@ -1066,7 +1052,6 @@ export default function OrderManagement() {
                           return (
                             <TableRow key={index}>
                               <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                              <TableCell>{order.customerName}</TableCell>
                               <TableCell>{order.orderDate}</TableCell>
                               <TableCell>{order.items.length} items</TableCell>
                               <TableCell>{formatCurrency(estimatedTotal)}</TableCell>

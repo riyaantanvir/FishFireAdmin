@@ -14,7 +14,7 @@ export const users = pgTable("users", {
 export const orders = pgTable("orders", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderNumber: text("order_number").notNull().unique(),
-  customerName: text("customer_name").notNull(),
+  customerName: text("customer_name"), // Optional for backward compatibility
   items: text("items").notNull(), // JSON string of order items
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   status: text("status").notNull().default("pending"),
@@ -79,7 +79,7 @@ export const payments = pgTable("payments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   orderId: varchar("order_id").notNull(), // Reference to order
   orderNumber: text("order_number").notNull(), // For easier querying
-  customerName: text("customer_name").notNull(), // For easier querying
+  customerName: text("customer_name"), // Optional for backward compatibility
   orderTotal: decimal("order_total", { precision: 10, scale: 2 }).notNull(),
   totalPaid: decimal("total_paid", { precision: 10, scale: 2 }).notNull(),
   // Cash breakdown
