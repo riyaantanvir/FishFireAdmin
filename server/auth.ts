@@ -42,10 +42,11 @@ async function comparePasswords(supplied: string, stored: string) {
   return timingSafeEqual(hashedBuf, suppliedBuf);
 }
 
-// JWT middleware for authentication
+// JWT middleware for authentication - supports both JWT tokens and session-based auth
 export function authenticateJWT(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   
+  // First, try JWT token authentication
   if (authHeader) {
     const token = authHeader.split(' ')[1]; // Bearer TOKEN
     
@@ -69,8 +70,12 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
       
       next();
     });
+  } else if (req.isAuthenticated && req.isAuthenticated()) {
+    // Fall back to session-based authentication (Passport.js)
+    console.log('Authenticated via session');
+    next();
   } else {
-    console.log('No authorization header found');
+    console.log('No authorization header found and not authenticated via session');
     res.sendStatus(401);
   }
 }
