@@ -234,13 +234,18 @@ async function logAuditEvent(
   }
 }
 
-// Generate JWT token
-function generateToken(user: SelectUser): string {
+// Generate JWT token with permissions
+async function generateToken(user: SelectUser): Promise<string> {
+  // Get user permissions for the token
+  const permissions = await storage.getUserPermissions(user.id);
+  const permissionNames = permissions.map(p => p.name);
+  
   return jwt.sign(
     { 
       id: user.id, 
       username: user.username,
-      createdAt: user.createdAt 
+      createdAt: user.createdAt,
+      permissions: permissionNames
     },
     process.env.SESSION_SECRET!,
     { expiresIn: '24h' }
@@ -328,13 +333,28 @@ export function setupAuth(app: Express) {
     */
   });
 
-  app.post("/api/login", passport.authenticate("local"), (req, res) => {
+  app.post("/api/login", passport.authenticate("local"), async (req, res) => {
     const user = req.user as SelectUser;
-    const token = generateToken(user);
+    
+    // Get user permissions
+    const permissions = await storage.getUserPermissions(user.id);
+    const permissionNames = permissions.map(p => p.name);
+    
+    // Get user roles
+    const userRoles = await storage.getUserRoles(user.id);
+    const roles = await storage.getRoles();
+    const userRoleData = roles.filter(role => 
+      userRoles.some(ur => ur.roleId === role.id)
+    );
+    
+    // Generate token with permissions
+    const token = await generateToken(user);
     
     res.status(200).json({
       user: user,
-      token: token
+      token: token,
+      permissions: permissionNames,
+      roles: userRoleData.map(r => r.name)
     });
   });
 
