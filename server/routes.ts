@@ -59,7 +59,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.put("/api/orders/:id", authenticateJWT, async (req, res) => {
+  app.put("/api/orders/:id", authenticateJWT, requirePermission("edit:orders"), async (req, res) => {
     try {
       const order = await storage.updateOrder(req.params.id, req.body);
       if (!order) {
@@ -114,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/orders/:id", authenticateJWT, async (req, res) => {
+  app.delete("/api/orders/:id", authenticateJWT, requirePermission("delete:orders"), async (req, res) => {
     try {
       const deleted = await storage.deleteOrder(req.params.id);
       if (!deleted) {
