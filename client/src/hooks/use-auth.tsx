@@ -36,10 +36,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const res = await apiRequest("POST", "/api/login", credentials);
       return await res.json();
     },
-    onSuccess: (response: { user: SelectUser; token: string }) => {
+    onSuccess: (response: { user: SelectUser; token: string; permissions: string[]; roles: string[] }) => {
       // Store JWT token in localStorage
       localStorage.setItem('auth_token', response.token);
+      
+      // Immediately cache the user data
       queryClient.setQueryData(["/api/user"], response.user);
+      
+      // Pre-cache permissions so they're available instantly without additional request
+      queryClient.setQueryData(["/api/user/permissions"], { 
+        permissions: response.permissions 
+      });
+      
+      // Invalidate all queries to ensure fresh data with new permissions
+      queryClient.invalidateQueries();
     },
     onError: (error: Error) => {
       toast({
