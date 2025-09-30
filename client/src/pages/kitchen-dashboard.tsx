@@ -182,12 +182,27 @@ export default function KitchenDashboard() {
     }
   };
 
-  const parseOrderItems = (itemsJson: string): any[] => {
-    try {
-      return JSON.parse(itemsJson);
-    } catch {
-      return [];
+  const parseOrderItems = (itemsData: string | any[]): any[] => {
+    // If already an array, return it
+    if (Array.isArray(itemsData)) {
+      return itemsData;
     }
+    
+    // If it's a string, try to parse it
+    if (typeof itemsData === 'string') {
+      try {
+        return JSON.parse(itemsData);
+      } catch {
+        return [];
+      }
+    }
+    
+    // If it's an object (single item), wrap in array
+    if (itemsData && typeof itemsData === 'object') {
+      return [itemsData];
+    }
+    
+    return [];
   };
 
   if (isLoading) {
