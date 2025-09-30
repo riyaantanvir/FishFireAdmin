@@ -271,6 +271,9 @@ export class MemStorage implements IStorage {
     // Create default item types
     this.createDefaultItemTypes();
     
+    // Create default expense categories
+    this.createDefaultExpenseCategories();
+    
     // Create default items
     this.createDefaultItems();
   }
@@ -296,6 +299,35 @@ export class MemStorage implements IStorage {
     });
 
     console.log(`Created ${defaultTypes.length} default item types`);
+  }
+
+  private createDefaultExpenseCategories() {
+    const defaultCategories = [
+      { name: "Fish Purchase (Per KG)", description: "Fish and seafood purchases by weight" },
+      { name: "Fish Purchase (Per PCS)", description: "Fish and seafood purchases by piece" },
+      { name: "Transportation", description: "Transportation and delivery costs" },
+      { name: "Salary", description: "Staff salaries and wages" },
+      { name: "Utilities", description: "Electricity, water, gas bills" },
+      { name: "Rent", description: "Shop or facility rent" },
+      { name: "Supplies", description: "General supplies and materials" },
+      { name: "Marketing", description: "Advertising and promotion expenses" },
+      { name: "Maintenance", description: "Equipment and facility maintenance" },
+      { name: "Other", description: "Miscellaneous expenses" },
+    ];
+
+    defaultCategories.forEach(categoryData => {
+      const id = randomUUID();
+      const expenseCategory: ExpenseCategory = {
+        id,
+        name: categoryData.name,
+        description: categoryData.description,
+        isActive: "true",
+        createdAt: new Date()
+      };
+      this.expenseCategories.set(id, expenseCategory);
+    });
+
+    console.log(`Created ${defaultCategories.length} default expense categories`);
   }
 
   private createDefaultItems() {
