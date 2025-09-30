@@ -97,10 +97,6 @@ export interface IStorage {
   getAuditLogs(filters?: { userId?: string; action?: string; resource?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }): Promise<{ logs: AuditLog[]; total: number }>;
   createAuditLog(auditLog: InsertAuditLog): Promise<AuditLog>;
   
-  // Kitchen Management
-  getKitchenOrders(filters?: { date?: string; status?: string }): Promise<Order[]>;
-  updateKitchenStatus(orderId: string, status: string): Promise<Order | undefined>;
-  
   sessionStore: session.Store;
 }
 
@@ -924,52 +920,6 @@ export class MemStorage implements IStorage {
     };
     this.auditLogs.set(id, auditLog);
     return auditLog;
-  }
-
-  // Kitchen Management Methods
-  async getKitchenOrders(filters?: { date?: string; status?: string }): Promise<Order[]> {
-    let orders = Array.from(this.orders.values());
-    
-    if (filters?.date) {
-      orders = orders.filter(order => order.orderDate === filters.date);
-    }
-    
-    if (filters?.status) {
-      orders = orders.filter(order => order.kitchenStatus === filters.status);
-    }
-    
-    // Sort by creation time (oldest first for kitchen workflow)
-    return orders.sort((a, b) => 
-      new Date(a.createdAt || 0).getTime() - new Date(b.createdAt || 0).getTime()
-    );
-  }
-
-  async updateKitchenStatus(orderId: string, status: string): Promise<Order | undefined> {
-    const order = this.orders.get(orderId);
-    if (!order) return undefined;
-    
-    const now = new Date();
-    const updates: Partial<Order> = { kitchenStatus: status };
-    
-    // Set appropriate timestamp based on status
-    switch (status) {
-      case "Pending":
-        updates.kitchenReceivedAt = now;
-        break;
-      case "Preparing":
-        updates.kitchenStartedAt = now;
-        break;
-      case "Ready to Serve":
-        updates.kitchenReadyAt = now;
-        break;
-      case "Served":
-        updates.kitchenServedAt = now;
-        break;
-    }
-    
-    const updatedOrder = { ...order, ...updates };
-    this.orders.set(orderId, updatedOrder);
-    return updatedOrder;
   }
 }
 

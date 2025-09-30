@@ -139,62 +139,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Kitchen Management API
-  app.get("/api/kitchen/orders", authenticateJWT, async (req, res) => {
-    try {
-      const { date, status } = req.query;
-      const filters: any = {};
-      
-      if (date && typeof date === 'string') {
-        filters.date = date;
-      }
-      
-      if (status && typeof status === 'string') {
-        filters.status = status;
-      }
-      
-      const orders = await storage.getKitchenOrders(filters);
-      res.json(orders);
-    } catch (error) {
-      console.error('Get kitchen orders error:', error);
-      res.status(500).json({ message: "Failed to fetch kitchen orders" });
-    }
-  });
-
-  app.patch("/api/kitchen/orders/:id/status", authenticateJWT, async (req, res) => {
-    try {
-      const { status } = req.body;
-      
-      if (!status || typeof status !== 'string') {
-        return res.status(400).json({ message: "Invalid status" });
-      }
-      
-      const order = await storage.updateKitchenStatus(req.params.id, status);
-      
-      if (!order) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-      
-      // Audit log
-      try {
-        await storage.createAuditLog({
-          userId: req.user!.id,
-          action: "update",
-          resource: "kitchen_order",
-          resourceId: order.id,
-          newData: JSON.stringify({ kitchenStatus: status }),
-        });
-      } catch (auditError) {
-        console.warn('Audit log failed for kitchen status update:', auditError);
-      }
-      
-      res.json(order);
-    } catch (error) {
-      console.error('Update kitchen status error:', error);
-      res.status(500).json({ message: "Failed to update kitchen status" });
-    }
-  });
-
   // Items API
   app.get("/api/items", authenticateJWT, async (req, res) => {
     try {
