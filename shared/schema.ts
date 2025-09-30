@@ -23,6 +23,12 @@ export const orders = pgTable("orders", {
   status: text("status").notNull().default("pending"),
   paymentStatus: text("payment_status").notNull().default("Unpaid"), // Paid, Unpaid, Partial
   orderDate: text("order_date").notNull(), // User-specified order date
+  // Kitchen Management fields
+  kitchenStatus: text("kitchen_status").notNull().default("New"), // New, Preparing, Ready to Serve, Served
+  kitchenReceivedAt: timestamp("kitchen_received_at"), // When order was received in kitchen
+  kitchenStartedAt: timestamp("kitchen_started_at"), // When preparation started
+  kitchenReadyAt: timestamp("kitchen_ready_at"), // When order became ready
+  kitchenServedAt: timestamp("kitchen_served_at"), // When order was served
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -284,6 +290,10 @@ export type InsertUserRole = z.infer<typeof insertUserRoleSchema>;
 export type UserRole = typeof userRoles.$inferSelect;
 export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;
 export type AuditLog = typeof auditLogs.$inferSelect;
+
+// Kitchen Status Constants
+export const KITCHEN_STATUSES = ["New", "Preparing", "Ready to Serve", "Served"] as const;
+export type KitchenStatus = typeof KITCHEN_STATUSES[number];
 
 // RBAC Constants - these should match the seeded data in the database
 export const DEFAULT_ROLES = ["Admin", "Manager", "Cashier", "Kitchen", "Staff"] as const;
