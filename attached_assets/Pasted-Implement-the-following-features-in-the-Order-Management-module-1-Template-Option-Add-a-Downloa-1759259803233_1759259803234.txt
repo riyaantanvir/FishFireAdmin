@@ -1,0 +1,106 @@
+Implement the following features in the Order Management module:
+
+1. Template Option
+
+Add a “Download Template” button to export a blank CSV with these exact headers:
+
+Order Number, Date, Customer, Item Name, Live Weight, KG/PCG Price, PCS, Discount %, Discount TK, PAID BILL, Payment Method, Comment
+
+
+The Customer field can be empty, no errors should be raised.
+
+2. Import Option
+
+Add an “Import CSV” button to upload CSV files.
+
+After uploading:
+
+Show a Preview Page with parsed data.
+
+If there are errors or missing fields → display them in an Error Log Table.
+
+Allow the user to edit/fix errors inline before submitting.
+
+Include a Submit button to finalize import.
+
+3. Progress Bar for Large Imports
+
+Since huge data will be imported, implement a progress bar with % completion so users can monitor progress.
+
+Ensure import does not freeze.
+
+4. Export Option
+
+Add an “Export Data” button to download all orders in CSV format, keeping the same template headers.
+
+5. Item Handling per Order
+
+Each order can have multiple items under the same Order Number.
+
+When viewing an order:
+
+Show all items grouped together.
+
+Display the total calculated bill for that order.
+
+6. Calculation Rules
+
+If Live Weight is filled (grams):
+
+Convert grams → kilograms.
+
+Formula:
+
+(Live Weight ÷ 1000) × KG/PCG Price
+
+
+Example:
+
+Live Weight = 1150 g
+
+KG/PCG Price = 400 (per KG)
+
+Calculation = (1150 ÷ 1000) × 400 = 1.15 × 400 = 460 TK
+
+If Live Weight is empty (per PCS item):
+
+Formula:
+
+PCS × KG/PCG Price
+
+
+Example:
+
+PCS = 3
+
+KG/PCG Price = 20 (per piece)
+
+Calculation = 3 × 20 = 60 TK
+
+Apply Discounts:
+
+If Discount % exists → reduce that percentage.
+
+If Discount TK exists → subtract that fixed amount.
+
+Formula:
+
+Final Bill = (Calculated Total – Discount TK) – (Calculated Total × (Discount % ÷ 100))
+
+7. Error Handling Page
+
+After import, open a new page showing:
+
+Errors highlighted row-wise (invalid/missing values).
+
+Option to edit and fix directly in the table.
+
+Re-submit button after corrections.
+
+8. Final Data Flow
+
+Once confirmed, data is saved into the Order Management system.
+
+PAID BILL column auto-calculates from Live Weight/PCS × KG/PCG Price minus discounts.
+
+Totals are synced per order so the full bill is always correct.

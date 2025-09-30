@@ -19,11 +19,30 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, AlertCircle } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
+import { Progress } from "@/components/ui/progress";
+import { Textarea } from "@/components/ui/textarea";
 import type { Order } from "@shared/schema";
+
+interface ImportRow {
+  orderNumber: string;
+  date: string;
+  customer: string;
+  itemName: string;
+  liveWeight: string;
+  kgPcgPrice: string;
+  pcs: string;
+  discountPercent: string;
+  discountTk: string;
+  paidBill: string;
+  paymentMethod: string;
+  comment: string;
+  errors: string[];
+  rowIndex: number;
+}
 
 export default function OrderManagement() {
   const [searchTerm, setSearchTerm] = useState("");
@@ -31,10 +50,17 @@ export default function OrderManagement() {
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  
+  // Import/Export states
+  const [importPreviewModal, setImportPreviewModal] = useState(false);
+  const [importData, setImportData] = useState<ImportRow[]>([]);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState(0);
+  
   const itemsPerPage = 20;
   
   const { toast } = useToast();
-  const { canView, canDelete } = usePermissions();
+  const { canView, canDelete, canCreate, canExport } = usePermissions();
 
   // Fetch all orders (no date filtering)
   const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
@@ -112,6 +138,331 @@ export default function OrderManagement() {
     setCurrentPage(page);
   };
 
+  // Download CSV Template
+  const handleDownloadTemplate = () => {
+    const headers = [
+      "Order Number",
+      "Date",
+      "Customer",
+      "Item Name",
+      "Live Weight",
+      "KG/PCG Price",
+      "PCS",
+      "Discount %",
+      "Discount TK",
+      "PAID BILL",
+      "Payment Method",
+      "Comment"
+    ];
+    
+    const csv = headers.join(",") + "\n";
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `order-template-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Template Downloaded",
+      description: "CSV template has been downloaded successfully.",
+    });
+  };
+
+  // Parse and validate CSV
+  const parseCSV = (csvText: string): ImportRow[] => {
+    const lines = csvText.split('\n').filter(line => line.trim());
+    if (lines.length < 2) return [];
+    
+    const headers = lines[0].split(',').map(h => h.trim());
+    const rows: ImportRow[] = [];
+    
+    for (let i = 1; i < lines.length; i++) {
+      const values = lines[i].split(',').map(v => v.trim());
+      const errors: string[] = [];
+      
+      const orderNumber = values[0] || '';
+      const date = values[1] || '';
+      const customer = values[2] || '';
+      const itemName = values[3] || '';
+      const liveWeight = values[4] || '';
+      const kgPcgPrice = values[5] || '';
+      const pcs = values[6] || '';
+      const discountPercent = values[7] || '';
+      const discountTk = values[8] || '';
+      const paidBill = values[9] || '';
+      const paymentMethod = values[10] || '';
+      const comment = values[11] || '';
+      
+      // Validation
+      if (!orderNumber) errors.push('Order Number is required');
+      if (!date) errors.push('Date is required');
+      if (!itemName) errors.push('Item Name is required');
+      if (!kgPcgPrice || isNaN(Number(kgPcgPrice))) errors.push('KG/PCG Price must be a valid number');
+      if (!liveWeight && !pcs) errors.push('Either Live Weight or PCS must be filled');
+      if (liveWeight && isNaN(Number(liveWeight))) errors.push('Live Weight must be a valid number');
+      if (pcs && isNaN(Number(pcs))) errors.push('PCS must be a valid number');
+      if (discountPercent && isNaN(Number(discountPercent))) errors.push('Discount % must be a valid number');
+      if (discountTk && isNaN(Number(discountTk))) errors.push('Discount TK must be a valid number');
+      
+      rows.push({
+        orderNumber,
+        date,
+        customer,
+        itemName,
+        liveWeight,
+        kgPcgPrice,
+        pcs,
+        discountPercent,
+        discountTk,
+        paidBill,
+        paymentMethod,
+        comment,
+        errors,
+        rowIndex: i
+      });
+    }
+    
+    return rows;
+  };
+
+  // Calculate bill for a row
+  const calculateBill = (row: ImportRow): number => {
+    const price = Number(row.kgPcgPrice) || 0;
+    let total = 0;
+    
+    if (row.liveWeight) {
+      // Convert grams to kg and calculate
+      const weightInKg = Number(row.liveWeight) / 1000;
+      total = weightInKg * price;
+    } else if (row.pcs) {
+      // PCS calculation
+      total = Number(row.pcs) * price;
+    }
+    
+    // Apply discounts
+    const discountTk = Number(row.discountTk) || 0;
+    const discountPercent = Number(row.discountPercent) || 0;
+    
+    total = total - discountTk - (total * (discountPercent / 100));
+    
+    return Math.max(0, total);
+  };
+
+  // Handle CSV file upload
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const csvText = e.target?.result as string;
+      const parsed = parseCSV(csvText);
+      setImportData(parsed);
+      setImportPreviewModal(true);
+    };
+    reader.readAsText(file);
+    
+    // Reset input
+    event.target.value = '';
+  };
+
+  // Update import row
+  const updateImportRow = (rowIndex: number, field: keyof ImportRow, value: string) => {
+    setImportData(prev => prev.map(row => {
+      if (row.rowIndex === rowIndex) {
+        const updated = { ...row, [field]: value };
+        
+        // Re-validate
+        const errors: string[] = [];
+        if (!updated.orderNumber) errors.push('Order Number is required');
+        if (!updated.date) errors.push('Date is required');
+        if (!updated.itemName) errors.push('Item Name is required');
+        if (!updated.kgPcgPrice || isNaN(Number(updated.kgPcgPrice))) errors.push('KG/PCG Price must be a valid number');
+        if (!updated.liveWeight && !updated.pcs) errors.push('Either Live Weight or PCS must be filled');
+        if (updated.liveWeight && isNaN(Number(updated.liveWeight))) errors.push('Live Weight must be a valid number');
+        if (updated.pcs && isNaN(Number(updated.pcs))) errors.push('PCS must be a valid number');
+        if (updated.discountPercent && isNaN(Number(updated.discountPercent))) errors.push('Discount % must be a valid number');
+        if (updated.discountTk && isNaN(Number(updated.discountTk))) errors.push('Discount TK must be a valid number');
+        
+        updated.errors = errors;
+        return updated;
+      }
+      return row;
+    }));
+  };
+
+  // Submit import
+  const handleSubmitImport = async () => {
+    // Check for errors
+    const hasErrors = importData.some(row => row.errors.length > 0);
+    if (hasErrors) {
+      toast({
+        title: "Validation Errors",
+        description: "Please fix all errors before submitting.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    setIsImporting(true);
+    setImportProgress(0);
+    
+    // Group by order number
+    const orderGroups = importData.reduce((acc, row) => {
+      if (!acc[row.orderNumber]) {
+        acc[row.orderNumber] = [];
+      }
+      acc[row.orderNumber].push(row);
+      return acc;
+    }, {} as Record<string, ImportRow[]>);
+    
+    const orderNumbers = Object.keys(orderGroups);
+    const totalOrders = orderNumbers.length;
+    
+    try {
+      for (let i = 0; i < totalOrders; i++) {
+        const orderNumber = orderNumbers[i];
+        const orderRows = orderGroups[orderNumber];
+        const firstRow = orderRows[0];
+        
+        // Calculate total for this order
+        let orderTotal = 0;
+        const items = orderRows.map(row => {
+          const itemTotal = calculateBill(row);
+          orderTotal += itemTotal;
+          
+          return {
+            name: row.itemName,
+            liveWeight: row.liveWeight ? Number(row.liveWeight) : (row.pcs ? Number(row.pcs) : 0),
+            price: Number(row.kgPcgPrice),
+            itemSaleType: row.liveWeight ? "Per KG" : "Per PCS",
+            discountPercentage: Number(row.discountPercent) || 0,
+            discountAmount: Number(row.discountTk) || 0,
+          };
+        });
+        
+        // Create order (Note: paymentMethod and comment from CSV are not stored in current schema)
+        await apiRequest("POST", "/api/orders", {
+          orderNumber: orderNumber,
+          customerName: firstRow.customer || 'Walk-in Customer',
+          orderDate: firstRow.date,
+          totalAmount: orderTotal.toString(),
+          status: 'completed',
+          items: JSON.stringify({ items }),
+        });
+        
+        setImportProgress(Math.round(((i + 1) / totalOrders) * 100));
+        
+        // Small delay to prevent overwhelming the server
+        await new Promise(resolve => setTimeout(resolve, 50));
+      }
+      
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      
+      toast({
+        title: "Import Successful",
+        description: `Successfully imported ${totalOrders} orders.`,
+      });
+      
+      setImportPreviewModal(false);
+      setImportData([]);
+    } catch (error) {
+      toast({
+        title: "Import Failed",
+        description: "An error occurred during import. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsImporting(false);
+      setImportProgress(0);
+    }
+  };
+
+  // Export all orders
+  const handleExportOrders = () => {
+    if (orders.length === 0) {
+      toast({
+        title: "No Data",
+        description: "No orders available to export.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    const headers = [
+      "Order Number",
+      "Date",
+      "Customer",
+      "Item Name",
+      "Live Weight",
+      "KG/PCG Price",
+      "PCS",
+      "Discount %",
+      "Discount TK",
+      "PAID BILL",
+      "Payment Method",
+      "Comment"
+    ];
+    
+    const rows: string[] = [headers.join(",")];
+    
+    orders.forEach(order => {
+      const orderData = parseOrderData(order.items);
+      const orderDate = new Date(order.orderDate).toISOString().split('T')[0];
+      
+      orderData.items.forEach((item: any) => {
+        const liveWeight = item.itemSaleType === 'Per KG' ? item.liveWeight : '';
+        const pcs = item.itemSaleType === 'Per PCS' ? item.liveWeight : '';
+        
+        // Calculate bill using same logic as import: (liveWeight / 1000) * price for KG, pcs * price for PCS
+        let itemTotal = 0;
+        if (item.itemSaleType === 'Per KG' && liveWeight) {
+          itemTotal = (Number(liveWeight) / 1000) * Number(item.price);
+        } else if (item.itemSaleType === 'Per PCS' && pcs) {
+          itemTotal = Number(pcs) * Number(item.price);
+        }
+        
+        // Apply discounts
+        const discountTk = Number(item.discountAmount) || 0;
+        const discountPercent = Number(item.discountPercentage) || 0;
+        const calculatedBill = Math.max(0, itemTotal - discountTk - (itemTotal * (discountPercent / 100)));
+        
+        const row = [
+          order.orderNumber,
+          orderDate,
+          order.customerName || '',
+          item.name,
+          liveWeight,
+          item.price,
+          pcs,
+          item.discountPercentage || '',
+          item.discountAmount || '',
+          calculatedBill.toFixed(2),
+          '', // Payment Method - not stored in current Order schema
+          '' // Comment - not stored in current Order schema
+        ].map(v => `"${v}"`).join(",");
+        
+        rows.push(row);
+      });
+    });
+    
+    const csv = rows.join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `orders-export-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    
+    toast({
+      title: "Export Successful",
+      description: `Exported ${orders.length} orders to CSV.`,
+    });
+  };
+
   // Delete all orders mutation
   const deleteAllOrdersMutation = useMutation({
     mutationFn: async () => {
@@ -149,6 +500,47 @@ export default function OrderManagement() {
       {/* Header - Mobile Responsive */}
       <div className="space-y-4 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold">Order Management</h1>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDownloadTemplate}
+            data-testid="button-download-template"
+          >
+            <FileText className="h-4 w-4 mr-2" />
+            Download Template
+          </Button>
+          <PermissionGuard permission="create:orders">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => document.getElementById('csv-upload')?.click()}
+              data-testid="button-import-csv"
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              Import CSV
+            </Button>
+            <input
+              id="csv-upload"
+              type="file"
+              accept=".csv"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </PermissionGuard>
+          <PermissionGuard permission="export:orders">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportOrders}
+              disabled={orders.length === 0}
+              data-testid="button-export-data"
+            >
+              <Download className="h-4 w-4 mr-2" />
+              Export Data
+            </Button>
+          </PermissionGuard>
+        </div>
       </div>
 
       {/* Search Bar - Mobile Responsive */}
@@ -771,6 +1163,308 @@ export default function OrderManagement() {
               {deleteAllOrdersMutation.isPending ? "Deleting..." : "Delete All Orders"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Import Preview Modal */}
+      <Dialog open={importPreviewModal} onOpenChange={() => {
+        if (!isImporting) {
+          setImportPreviewModal(false);
+          setImportData([]);
+        }
+      }}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-lg sm:text-xl">CSV Import Preview</DialogTitle>
+            <DialogDescription>
+              Review and edit data before importing. Rows with errors are highlighted in red.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isImporting && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">Importing orders...</span>
+                <span className="text-sm text-muted-foreground">{importProgress}%</span>
+              </div>
+              <Progress value={importProgress} className="w-full" />
+            </div>
+          )}
+
+          {!isImporting && (
+            <>
+              {/* Error Summary */}
+              {importData.some(row => row.errors.length > 0) && (
+                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle className="h-5 w-5 text-red-600 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800 dark:text-red-200">
+                        {importData.filter(row => row.errors.length > 0).length} rows have errors
+                      </p>
+                      <p className="text-xs text-red-600 dark:text-red-300 mt-1">
+                        Please fix all errors before submitting.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Data Preview Table - Desktop */}
+              <div className="hidden lg:block overflow-x-auto max-h-[500px] overflow-y-auto">
+                <Table>
+                  <TableHeader className="sticky top-0 bg-background">
+                    <TableRow>
+                      <TableHead className="w-[80px]">Row</TableHead>
+                      <TableHead>Order #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Customer</TableHead>
+                      <TableHead>Item</TableHead>
+                      <TableHead>Weight(g)</TableHead>
+                      <TableHead>Price</TableHead>
+                      <TableHead>PCS</TableHead>
+                      <TableHead>Disc%</TableHead>
+                      <TableHead>Disc TK</TableHead>
+                      <TableHead>Calculated Bill</TableHead>
+                      <TableHead>Errors</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {importData.map((row) => (
+                      <TableRow key={row.rowIndex} className={row.errors.length > 0 ? 'bg-red-50 dark:bg-red-900/10' : ''}>
+                        <TableCell className="font-mono text-xs">{row.rowIndex}</TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.orderNumber}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'orderNumber', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Order Number')) ? 'border-red-500' : ''}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.date}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'date', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Date')) ? 'border-red-500' : ''}`}
+                            type="date"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.customer}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'customer', e.target.value)}
+                            className="h-8"
+                            placeholder="Optional"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.itemName}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'itemName', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Item Name')) ? 'border-red-500' : ''}`}
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.liveWeight}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'liveWeight', e.target.value)}
+                            className={`h-8 w-24 ${row.errors.some(e => e.includes('Live Weight')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.kgPcgPrice}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'kgPcgPrice', e.target.value)}
+                            className={`h-8 w-24 ${row.errors.some(e => e.includes('Price')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.pcs}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'pcs', e.target.value)}
+                            className={`h-8 w-20 ${row.errors.some(e => e.includes('PCS')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.discountPercent}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'discountPercent', e.target.value)}
+                            className="h-8 w-20"
+                            type="number"
+                          />
+                        </TableCell>
+                        <TableCell>
+                          <Input
+                            value={row.discountTk}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'discountTk', e.target.value)}
+                            className="h-8 w-24"
+                            type="number"
+                          />
+                        </TableCell>
+                        <TableCell className="font-semibold">
+                          TK {calculateBill(row).toFixed(2)}
+                        </TableCell>
+                        <TableCell>
+                          {row.errors.length > 0 && (
+                            <div className="text-xs text-red-600 space-y-1">
+                              {row.errors.map((error, i) => (
+                                <div key={i}>• {error}</div>
+                              ))}
+                            </div>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+
+              {/* Data Preview Cards - Mobile */}
+              <div className="lg:hidden space-y-3 max-h-[500px] overflow-y-auto">
+                {importData.map((row) => (
+                  <Card key={row.rowIndex} className={row.errors.length > 0 ? 'border-red-500 bg-red-50 dark:bg-red-900/10' : ''}>
+                    <CardContent className="pt-4 space-y-3">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-mono text-muted-foreground">Row {row.rowIndex}</span>
+                        {row.errors.length > 0 && (
+                          <Badge variant="destructive" className="text-xs">
+                            {row.errors.length} errors
+                          </Badge>
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-xs text-muted-foreground">Order #</label>
+                          <Input
+                            value={row.orderNumber}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'orderNumber', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Order Number')) ? 'border-red-500' : ''}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Date</label>
+                          <Input
+                            value={row.date}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'date', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Date')) ? 'border-red-500' : ''}`}
+                            type="date"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-muted-foreground">Customer (Optional)</label>
+                          <Input
+                            value={row.customer}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'customer', e.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-xs text-muted-foreground">Item Name</label>
+                          <Input
+                            value={row.itemName}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'itemName', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Item Name')) ? 'border-red-500' : ''}`}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Weight (g)</label>
+                          <Input
+                            value={row.liveWeight}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'liveWeight', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Live Weight')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">PCS</label>
+                          <Input
+                            value={row.pcs}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'pcs', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('PCS')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Price</label>
+                          <Input
+                            value={row.kgPcgPrice}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'kgPcgPrice', e.target.value)}
+                            className={`h-8 ${row.errors.some(e => e.includes('Price')) ? 'border-red-500' : ''}`}
+                            type="number"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Discount %</label>
+                          <Input
+                            value={row.discountPercent}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'discountPercent', e.target.value)}
+                            className="h-8"
+                            type="number"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-xs text-muted-foreground">Discount TK</label>
+                          <Input
+                            value={row.discountTk}
+                            onChange={(e) => updateImportRow(row.rowIndex, 'discountTk', e.target.value)}
+                            className="h-8"
+                            type="number"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-between items-center pt-2 border-t">
+                        <span className="text-sm font-medium">Calculated Bill:</span>
+                        <span className="text-lg font-bold text-primary">TK {calculateBill(row).toFixed(2)}</span>
+                      </div>
+
+                      {row.errors.length > 0 && (
+                        <div className="text-xs text-red-600 space-y-1 p-2 bg-red-100 dark:bg-red-900/20 rounded">
+                          {row.errors.map((error, i) => (
+                            <div key={i}>• {error}</div>
+                          ))}
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+
+              {/* Summary */}
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded p-3">
+                <p className="text-sm text-blue-800 dark:text-blue-200">
+                  <strong>Summary:</strong> {importData.length} rows will be imported as {Object.keys(importData.reduce((acc, row) => {
+                    if (!acc[row.orderNumber]) acc[row.orderNumber] = true;
+                    return acc;
+                  }, {} as Record<string, boolean>)).length} orders
+                </p>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setImportPreviewModal(false);
+                    setImportData([]);
+                  }}
+                  data-testid="button-cancel-import"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={handleSubmitImport}
+                  disabled={importData.some(row => row.errors.length > 0)}
+                  data-testid="button-submit-import"
+                >
+                  Submit Import
+                </Button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>
