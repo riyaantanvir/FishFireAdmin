@@ -12,7 +12,8 @@ import {
   DollarSign,
   Scale,
   Users,
-  Shield
+  Shield,
+  ChefHat
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +28,7 @@ interface SidebarProps {
 const navigationItems = [
   { href: "/", icon: Home, label: "Dashboard" },
   { href: "/daily-orders", icon: Calendar, label: "Daily Orders" },
+  { href: "/kitchen-dashboard", icon: ChefHat, label: "Kitchen Dashboard" },
   { href: "/item-management", icon: Package, label: "Item Management" },
   { href: "/order-management", icon: ClipboardList, label: "Order Management" },
   { href: "/expense-management", icon: DollarSign, label: "Expense Management" },
