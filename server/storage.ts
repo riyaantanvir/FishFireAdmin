@@ -319,13 +319,19 @@ export class MemStorage implements IStorage {
 
   async createOrder(insertOrder: InsertOrder): Promise<Order> {
     const id = randomUUID();
+    const now = new Date();
     const order: Order = {
       ...insertOrder,
       id,
       status: insertOrder.status || "pending",
       paymentStatus: insertOrder.paymentStatus || "Unpaid",
       customerName: insertOrder.customerName || null,
-      createdAt: new Date(),
+      kitchenStatus: insertOrder.kitchenStatus || "New",
+      kitchenReceivedAt: insertOrder.kitchenReceivedAt || now,
+      kitchenStartedAt: insertOrder.kitchenStartedAt || null,
+      kitchenReadyAt: insertOrder.kitchenReadyAt || null,
+      kitchenServedAt: insertOrder.kitchenServedAt || null,
+      createdAt: now,
     };
     this.orders.set(id, order);
     return order;
