@@ -16,10 +16,70 @@ export default function KitchenDashboard() {
     return format(new Date(), "yyyy-MM-dd");
   });
   const [filterType, setFilterType] = useState<string>("today");
+  const [previousOrderCount, setPreviousOrderCount] = useState<number>(0);
+  const [isInitialized, setIsInitialized] = useState<boolean>(false);
   
   const { data: allOrders = [], isLoading } = useQuery<Order[]>({
     queryKey: ["/api/kitchen/orders", { date: filterType === "all" ? undefined : dateFilter }],
+    queryFn: async () => {
+      const params = new URLSearchParams();
+      if (filterType !== "all" && dateFilter) {
+        params.append("date", dateFilter);
+      }
+      const url = `/api/kitchen/orders${params.toString() ? `?${params.toString()}` : ""}`;
+      const response = await fetch(url, {
+        credentials: "include",
+      });
+      if (!response.ok) {
+        throw new Error("Failed to fetch kitchen orders");
+      }
+      return response.json();
+    },
+    refetchInterval: 10000, // Poll every 10 seconds for new orders
   });
+
+  // Detect new orders and show notification
+  useEffect(() => {
+    if (!allOrders || isLoading) return;
+    
+    const newOrderCount = allOrders.filter(order => order.kitchenStatus === "New").length;
+    
+    // On first load, just initialize the count without notification
+    if (!isInitialized) {
+      setPreviousOrderCount(newOrderCount);
+      setIsInitialized(true);
+      return;
+    }
+    
+    // Show notification if order count increased
+    if (newOrderCount > previousOrderCount) {
+      const newOrdersAdded = newOrderCount - previousOrderCount;
+      toast({
+        title: "🔔 New Order Alert!",
+        description: `${newOrdersAdded} new order${newOrdersAdded > 1 ? 's' : ''} received in kitchen`,
+        duration: 5000,
+      });
+      
+      // Play notification sound if browser supports it
+      try {
+        const audio = new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m58OScTgwOUKzk7bllHAU2jdXuy3otBSV9yO/glEILElmy5+ytWBUIRZze8L9vIgQmgMrt2YY1BxhntOrnnE4MDU+q4+uzYhoENIvT78p5LQUlfsjv35RCC");
+        audio.volume = 0.3;
+        audio.play().catch(() => {
+          // Ignore audio play errors (browser may block autoplay)
+        });
+      } catch {
+        // Ignore audio errors
+      }
+    }
+    
+    setPreviousOrderCount(newOrderCount);
+  }, [allOrders, isLoading, isInitialized, previousOrderCount, toast]);
+
+  // Reset tracking when filter changes to avoid false positives
+  useEffect(() => {
+    setIsInitialized(false);
+    setPreviousOrderCount(0);
+  }, [filterType, dateFilter]);
 
   const updateStatusMutation = useMutation({
     mutationFn: async ({ orderId, status }: { orderId: string; status: string }) => {
