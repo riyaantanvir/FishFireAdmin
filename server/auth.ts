@@ -46,6 +46,8 @@ async function comparePasswords(supplied: string, stored: string) {
 export function authenticateJWT(req: Request, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   
+  console.log(`[AUTH] ${req.method} ${req.path} - Has auth header: ${!!authHeader}, Session auth: ${req.isAuthenticated?.()}`);
+  
   // First, try JWT token authentication
   if (authHeader) {
     const token = authHeader.split(' ')[1]; // Bearer TOKEN
@@ -57,6 +59,7 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
       }
       
       req.user = user as SelectUser;
+      console.log(`[AUTH] JWT verified for user: ${req.user.username}`);
       
       // Update last login time (don't block authentication on failure)
       if (req.user?.id) {
@@ -72,10 +75,10 @@ export function authenticateJWT(req: Request, res: Response, next: NextFunction)
     });
   } else if (req.isAuthenticated && req.isAuthenticated()) {
     // Fall back to session-based authentication (Passport.js)
-    console.log('Authenticated via session');
+    console.log('[AUTH] Authenticated via session');
     next();
   } else {
-    console.log('No authorization header found and not authenticated via session');
+    console.log('[AUTH] Authentication failed - no JWT and no session');
     res.sendStatus(401);
   }
 }
