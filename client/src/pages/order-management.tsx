@@ -19,32 +19,27 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, CheckCircle, AlertCircle } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
-import type { Order, Item } from "@shared/schema";
+import type { Order } from "@shared/schema";
 
 export default function OrderManagement() {
   const [searchTerm, setSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
-  const [importPreviewModal, setImportPreviewModal] = useState(false);
-  const [importData, setImportData] = useState<any[]>([]);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
-  const [mergedOrders, setMergedOrders] = useState<any[]>([]);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
-  const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const itemsPerPage = 20;
   
   const { toast } = useToast();
-  const { canView, canCreate, canEdit, canDelete, canExport } = usePermissions();
+  const { canView, canDelete } = usePermissions();
 
   // Fetch all orders (no date filtering)
   const { data: orders = [], isLoading: ordersLoading } = useQuery<Order[]>({
     queryKey: ["/api/orders"],
-    enabled: canView("orders"), // Only fetch if user can view orders
+    enabled: canView("orders"),
   });
 
   // Filter orders based on search term
@@ -63,7 +58,6 @@ export default function OrderManagement() {
     try {
       const parsed = JSON.parse(itemsJson);
       
-      // Handle new wrapped format: { items, orderDiscountAmount, orderDiscountPercentage }
       if (parsed && typeof parsed === 'object' && Array.isArray(parsed.items)) {
         return {
           items: parsed.items,
@@ -72,7 +66,6 @@ export default function OrderManagement() {
         };
       }
       
-      // Handle legacy format: direct array
       if (Array.isArray(parsed)) {
         return {
           items: parsed,
@@ -119,467 +112,6 @@ export default function OrderManagement() {
     setCurrentPage(page);
   };
 
-  // CSV field escaping for proper generation
-  const escapeCSVField = (field: string): string => {
-    const stringField = String(field || '');
-    
-    // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
-    if (stringField.includes(',') || stringField.includes('"') || stringField.includes('\n') || stringField.includes('\r')) {
-      return `"${stringField.replace(/"/g, '""')}"`;
-    }
-    
-    return stringField;
-  };
-
-  // Export orders to CSV with expanded rows for each item
-  const exportOrdersToCSV = () => {
-    const headers = [
-      'Order Number',
-      'Order Date',
-      'Item Name',
-      'Live Weight',
-      'Unit Type',
-      'Unit Price',
-      'Item Total',
-      'Discount Amount',
-      'Discount %',
-      'Final Row Total'
-    ];
-
-    const csvRows = [headers.map(escapeCSVField).join(',')];
-
-    orders.forEach(order => {
-      const orderData = parseOrderData(order.items);
-      const { items, orderDiscountAmount, orderDiscountPercentage } = orderData;
-      
-      // Calculate order-level totals for proportional distribution
-      let orderSubtotal = 0;
-      let totalItemDiscounts = 0;
-      
-      items.forEach((item: any) => {
-        let itemTotal = 0;
-        if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-          itemTotal = (item.liveWeight * item.weightPerPCS) * item.price;
-        } else {
-          itemTotal = item.liveWeight * item.price;
-        }
-        orderSubtotal += itemTotal;
-        
-        let itemDiscount = 0;
-        if (item.discountPercentage > 0) {
-          itemDiscount += itemTotal * (item.discountPercentage / 100);
-        }
-        if (item.discountAmount > 0) {
-          itemDiscount += item.discountAmount;
-        }
-        totalItemDiscounts += itemDiscount;
-      });
-
-      const subtotalAfterItemDiscounts = orderSubtotal - totalItemDiscounts;
-      let totalOrderDiscounts = 0;
-      if (orderDiscountPercentage > 0) {
-        totalOrderDiscounts += subtotalAfterItemDiscounts * (orderDiscountPercentage / 100);
-      }
-      if (orderDiscountAmount > 0) {
-        totalOrderDiscounts += orderDiscountAmount;
-      }
-
-      items.forEach((item: any) => {
-        // Calculate item base total
-        let baseTotal = 0;
-        if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-          baseTotal = (item.liveWeight * item.weightPerPCS) * item.price;
-        } else {
-          baseTotal = item.liveWeight * item.price;
-        }
-        
-        // Calculate item-level discounts
-        let itemDiscount = 0;
-        let itemDiscountPercentage = 0;
-        if (item.discountPercentage > 0) {
-          itemDiscount += baseTotal * (item.discountPercentage / 100);
-          itemDiscountPercentage = item.discountPercentage;
-        }
-        if (item.discountAmount > 0) {
-          itemDiscount += item.discountAmount;
-        }
-        
-        const netItemTotal = Math.max(0, baseTotal - itemDiscount);
-        
-        // Calculate proportional order-level discount for this item
-        let itemOrderDiscount = 0;
-        if (subtotalAfterItemDiscounts > 0 && totalOrderDiscounts > 0) {
-          itemOrderDiscount = (netItemTotal / subtotalAfterItemDiscounts) * totalOrderDiscounts;
-        }
-        
-        const finalRowTotal = Math.max(0, netItemTotal - itemOrderDiscount);
-        
-        const row = [
-          order.orderNumber,
-          order.orderDate,
-          item.name || '',
-          item.liveWeight || 0,
-          item.itemSaleType === 'Per PCS' ? 'PCS' : 'KG',
-          item.price || 0,
-          baseTotal.toFixed(2),
-          (itemDiscount + itemOrderDiscount).toFixed(2),
-          itemDiscountPercentage || 0,
-          finalRowTotal.toFixed(2)
-        ];
-        
-        csvRows.push(row.map(escapeCSVField).join(','));
-      });
-    });
-
-    // Create and download CSV file
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `orders-export-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // Template CSV download
-  const downloadTemplate = () => {
-    const headers = [
-      'Order Number',
-      'Order Date',
-      'Item Name',
-      'Live Weight',
-      'Unit Type',
-      'Unit Price',
-      'Item Total',
-      'Discount Amount',
-      'Discount %',
-      'Final Row Total'
-    ];
-
-    const sampleData = [
-      'ORD-001,2025-09-28,Salmon Fish,2500,KG,15.00,37.50,2.00,5,33.63',
-      'ORD-001,2025-09-28,Chicken Breast,3000,PCS,8.00,24.00,0,0,21.60',
-      'ORD-002,2025-09-28,Tuna Fish,1800,KG,20.00,36.00,0,10,32.40'
-    ];
-
-    const csvRows = [headers.map(escapeCSVField).join(','), ...sampleData];
-    const csvContent = csvRows.join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', 'orders-import-template.csv');
-    link.style.visibility = 'hidden';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
-  // CSV parsing helper function 
-  const parseCSVLine = (line: string): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    let i = 0;
-
-    while (i < line.length) {
-      const char = line[i];
-      
-      if (char === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          // Escaped quote inside quoted field
-          current += '"';
-          i += 2;
-        } else {
-          // Toggle quote state
-          inQuotes = !inQuotes;
-          i++;
-        }
-      } else if (char === ',' && !inQuotes) {
-        // Field separator found outside quotes
-        result.push(current);
-        current = '';
-        i++;
-      } else {
-        current += char;
-        i++;
-      }
-    }
-    
-    // Add the last field
-    result.push(current);
-    
-    return result;
-  };
-
-  // Handle file import
-  const handleImportFile = async (file: File) => {
-    try {
-      const text = await file.text();
-      const lines = text.split('\n').filter(line => line.trim() !== '');
-      
-      if (lines.length === 0) {
-        toast({
-          title: "Empty file",
-          description: "The uploaded file appears to be empty.",
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const headers = parseCSVLine(lines[0]);
-      const expectedHeaders = ['Order Number', 'Order Date', 'Item Name', 'Live Weight', 'Unit Type', 'Unit Price', 'Item Total', 'Discount Amount', 'Discount %', 'Final Row Total'];
-      
-      // Check if headers match expected format (only these are required)
-      const requiredHeaders = ['Order Number', 'Order Date', 'Item Name'];
-      const missingHeaders = requiredHeaders.filter(header => !headers.includes(header));
-      
-      if (missingHeaders.length > 0) {
-        toast({
-          title: "Invalid CSV format",
-          description: `Missing required headers: ${missingHeaders.join(', ')}`,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const importedData = [];
-      const errors: string[] = [];
-
-      for (let i = 1; i < lines.length; i++) {
-        try {
-          const values = parseCSVLine(lines[i]);
-          const rowData: any = {};
-          
-          headers.forEach((header, index) => {
-            rowData[header] = values[index] || '';
-          });
-
-          // Validate required fields
-          let hasError = false;
-          
-          if (!rowData['Order Number'] || !rowData['Order Number'].trim()) {
-            errors.push(`Row ${i + 1}: Missing Order Number`);
-            hasError = true;
-          }
-          
-          if (!rowData['Order Date'] || !rowData['Order Date'].trim()) {
-            errors.push(`Row ${i + 1}: Missing Order Date`);
-            hasError = true;
-          } else {
-            // Validate date format (YYYY-MM-DD)
-            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-            if (!dateRegex.test(rowData['Order Date'])) {
-              errors.push(`Row ${i + 1}: Invalid date format (expected YYYY-MM-DD)`);
-              hasError = true;
-            }
-          }
-          
-          if (!rowData['Item Name'] || !rowData['Item Name'].trim()) {
-            errors.push(`Row ${i + 1}: Missing Item Name`);
-            hasError = true;
-          }
-          
-          // Validate numeric fields (optional - can be blank)
-          const liveWeight = rowData['Live Weight'] ? parseFloat(rowData['Live Weight']) : 1;
-          const unitPrice = rowData['Unit Price'] ? parseFloat(rowData['Unit Price']) : 0;
-          
-          // Only validate if values are provided
-          if (rowData['Live Weight'] && (isNaN(liveWeight) || liveWeight <= 0)) {
-            errors.push(`Row ${i + 1}: Invalid Live Weight (must be a positive number if provided)`);
-            hasError = true;
-          }
-          
-          if (rowData['Unit Price'] && (isNaN(unitPrice) || unitPrice < 0)) {
-            errors.push(`Row ${i + 1}: Invalid Unit Price (must be a non-negative number if provided)`);
-            hasError = true;
-          }
-
-          if (!hasError) {
-            importedData.push({
-              rowNumber: i + 1,
-              ...rowData,
-              'Live Weight': liveWeight,
-              'Unit Price': unitPrice,
-              'Discount Amount': parseFloat(rowData['Discount Amount'] || '0'),
-              'Discount %': parseFloat(rowData['Discount %'] || '0'),
-            });
-          }
-        } catch (error) {
-          errors.push(`Row ${i + 1}: Failed to parse row data`);
-        }
-      }
-
-      // Group by order number to create merged orders
-      const orderGroups: { [key: string]: any } = {};
-      
-      importedData.forEach(row => {
-        const orderNumber = row['Order Number'];
-        if (!orderGroups[orderNumber]) {
-          orderGroups[orderNumber] = {
-            orderNumber,
-            orderDate: row['Order Date'],
-            items: [],
-          };
-        }
-        
-        orderGroups[orderNumber].items.push({
-          name: row['Item Name'],
-          liveWeight: row['Live Weight'] || 1,
-          itemSaleType: row['Unit Type'] === 'PCS' ? 'Per PCS' : 'Per KG',
-          price: row['Unit Price'] || 0,
-          discountAmount: row['Discount Amount'] || 0,
-          discountPercentage: row['Discount %'] || 0,
-        });
-      });
-
-      const mergedOrderList = Object.values(orderGroups);
-
-      setImportData(importedData);
-      setImportErrors(errors);
-      setMergedOrders(mergedOrderList);
-      setImportPreviewModal(true);
-
-    } catch (error) {
-      toast({
-        title: "Import failed",
-        description: "Failed to read or parse the uploaded file.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  // Submit import data with batch processing
-  const submitImportMutation = useMutation({
-    mutationFn: async () => {
-      // Get current items from query cache
-      const currentItems = queryClient.getQueryData<Item[]>(["/api/items"]) || [];
-      const BATCH_SIZE = 50; // Process 50 orders at a time
-      const batches = [];
-      
-      // Split orders into batches
-      for (let i = 0; i < mergedOrders.length; i += BATCH_SIZE) {
-        batches.push(mergedOrders.slice(i, i + BATCH_SIZE));
-      }
-      
-      setImportProgress({ current: 0, total: mergedOrders.length });
-      
-      const results = [];
-      let processedCount = 0;
-      
-      // Process each batch sequentially to avoid overwhelming the server
-      for (const batch of batches) {
-        const batchPromises = batch.map(order => {
-          // Calculate totals for the order
-          let subtotal = 0;
-          let itemDiscounts = 0;
-          
-          // Process each item and find matching item data for calculations
-          const processedItems = order.items.map((item: any) => {
-            // Find matching item from the items list to get weightPerPCS if needed
-            const matchingItem = currentItems.find((i: any) => i.name === item.name);
-            
-            let itemTotal = 0;
-            let weightPerPCS = Number(matchingItem?.weightPerPCS) || 0;
-            let actualPrice = Number(item.price) || Number(matchingItem?.price) || 0;
-            
-            // Match the export calculation logic - liveWeight is already in correct unit
-            if (item.itemSaleType === "Per PCS" && weightPerPCS) {
-              // For Per PCS with weightPerPCS: Total = (liveWeight * weightPerPCS) * price
-              itemTotal = (item.liveWeight * weightPerPCS) * actualPrice;
-            } else {
-              // For both Per PCS without weightPerPCS and Per KG: Total = liveWeight * price
-              itemTotal = item.liveWeight * actualPrice;
-            }
-            
-            subtotal += itemTotal;
-            
-            let discount = 0;
-            if (item.discountPercentage > 0) {
-              discount += itemTotal * (item.discountPercentage / 100);
-            }
-            if (item.discountAmount > 0) {
-              discount += item.discountAmount;
-            }
-            itemDiscounts += discount;
-            
-            // Return processed item with all necessary fields
-            return {
-              itemId: matchingItem?.id || "",
-              name: item.name,
-              liveWeight: item.liveWeight,
-              price: actualPrice,
-              itemSaleType: item.itemSaleType,
-              weightPerPCS: weightPerPCS,
-              discountAmount: item.discountAmount || 0,
-              discountPercentage: item.discountPercentage || 0,
-            };
-          });
-
-          const finalTotal = Math.max(0, subtotal - itemDiscounts);
-
-          const orderData = {
-            orderNumber: order.orderNumber,
-            orderDate: order.orderDate,
-            items: JSON.stringify({
-              items: processedItems,
-              orderDiscountAmount: 0,
-              orderDiscountPercentage: 0,
-            }),
-            totalAmount: finalTotal.toString(),
-            status: "pending",
-          };
-
-          return apiRequest("POST", "/api/orders", orderData);
-        });
-
-        // Wait for current batch to complete before proceeding
-        const batchResults = await Promise.allSettled(batchPromises);
-        results.push(...batchResults);
-        
-        processedCount += batch.length;
-        setImportProgress({ current: processedCount, total: mergedOrders.length });
-        
-        // Small delay between batches to prevent server overload
-        if (batches.indexOf(batch) < batches.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      }
-      
-      // Check for failures
-      const failures = results.filter(result => result.status === 'rejected');
-      if (failures.length > 0) {
-        throw new Error(`${failures.length} orders failed to import`);
-      }
-      
-      return results;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
-      setImportPreviewModal(false);
-      setImportData([]);
-      setImportErrors([]);
-      setMergedOrders([]);
-      setImportProgress({ current: 0, total: 0 });
-      
-      toast({
-        title: "Import successful",
-        description: `Successfully imported ${mergedOrders.length} orders.`,
-      });
-    },
-    onError: (error: any) => {
-      setImportProgress({ current: 0, total: 0 });
-      toast({
-        title: "Import failed",
-        description: error.message || "Failed to import orders. Please try again.",
-        variant: "destructive",
-      });
-    },
-  });
-
   // Delete all orders mutation
   const deleteAllOrdersMutation = useMutation({
     mutationFn: async () => {
@@ -617,241 +149,175 @@ export default function OrderManagement() {
       {/* Header - Mobile Responsive */}
       <div className="space-y-4 sm:space-y-0 sm:flex sm:items-center sm:justify-between">
         <h1 className="text-2xl sm:text-3xl font-bold">Order Management</h1>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-          {/* Action Buttons - Mobile First */}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={downloadTemplate}
-              data-testid="button-template-download"
-              className="flex-1 sm:flex-none"
-            >
-              <FileText className="h-4 w-4 mr-2" />
-              <span className="hidden sm:inline">Template</span>
-              <span className="sm:hidden">Template</span>
-            </Button>
-            <PermissionGuard permission="export:orders">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={exportOrdersToCSV}
-                disabled={orders.length === 0}
-                data-testid="button-export-orders"
-                className="flex-1 sm:flex-none"
-              >
-                <Download className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Export</span>
-                <span className="sm:hidden">Export</span>
-              </Button>
-            </PermissionGuard>
-            <PermissionGuard permission="create:orders">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById('import-file-input')?.click()}
-                data-testid="button-import-orders"
-                className="flex-1 sm:flex-none"
-              >
-                <Upload className="h-4 w-4 mr-2" />
-                <span className="hidden sm:inline">Import</span>
-                <span className="sm:hidden">Import</span>
-              </Button>
-            </PermissionGuard>
-            <input
-              id="import-file-input"
-              type="file"
-              accept=".csv"
-              style={{ display: 'none' }}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  handleImportFile(file);
-                }
-              }}
-            />
-          </div>
-          <p className="text-sm sm:text-base text-gray-600 dark:text-gray-300 text-center sm:text-left">
-            Total Orders: {orders.length}
-          </p>
-        </div>
       </div>
 
-      {/* Search and Filters */}
+      {/* Search Bar - Mobile Responsive */}
       <Card>
-        <CardHeader>
-          <CardTitle>Search Orders</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col gap-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-500 dark:text-gray-400" />
-              <Input
-                data-testid="input-search-orders"
-                placeholder="Search by order number..."
-                value={searchTerm}
-                onChange={(e) => {
-                  setSearchTerm(e.target.value);
-                  setCurrentPage(1); // Reset to first page on search
-                }}
-                className="pl-10 h-12 text-base"
-              />
-            </div>
+        <CardContent className="pt-6">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Input
+              placeholder="Search by order number..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="pl-10"
+              data-testid="input-search-orders"
+            />
           </div>
         </CardContent>
       </Card>
 
-      {/* Orders Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Orders History</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Orders Summary - Mobile Responsive */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Total Orders
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl sm:text-3xl font-bold">{orders.length}</div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Pending Orders
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl sm:text-3xl font-bold text-yellow-600">
+              {orders.filter(o => o.status === "pending").length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Completed Orders
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl sm:text-3xl font-bold text-green-600">
+              {orders.filter(o => o.status === "completed").length}
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-gray-600 dark:text-gray-300">
+              Total Revenue
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-xl sm:text-2xl font-bold text-primary">
+              {formatCurrency(orders.reduce((sum, o) => sum + parseFloat(o.totalAmount), 0))}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Orders Table - Desktop */}
+      <Card className="hidden lg:block">
+        <CardContent className="pt-6">
           {currentOrders.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-500 dark:text-gray-400">
-                {searchTerm ? "No orders found matching your search." : "No orders found."}
-              </p>
+            <div className="text-center py-12 text-gray-500">
+              {searchTerm ? "No orders found matching your search." : "No orders available."}
             </div>
           ) : (
             <>
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Order Number</TableHead>
-                      <TableHead>Order Date</TableHead>
-                      <TableHead>Final Total</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {currentOrders.map((order) => (
-                      <TableRow key={order.id}>
-                        <TableCell className="font-medium" data-testid={`text-order-number-${order.id}`}>
-                          {order.orderNumber}
-                        </TableCell>
-                        <TableCell data-testid={`text-order-date-${order.id}`}>
-                          {formatDate(order.orderDate)}
-                        </TableCell>
-                        <TableCell data-testid={`text-final-total-${order.id}`}>
-                          {formatCurrency(order.totalAmount)}
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant={order.status === "completed" ? "default" : "secondary"}
-                            data-testid={`badge-status-${order.id}`}
-                          >
-                            {order.status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Order Number</TableHead>
+                    <TableHead>Customer</TableHead>
+                    <TableHead>Order Date</TableHead>
+                    <TableHead>Total Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {currentOrders.map((order) => (
+                    <TableRow key={order.orderNumber}>
+                      <TableCell className="font-medium">{order.orderNumber}</TableCell>
+                      <TableCell>{order.customerName}</TableCell>
+                      <TableCell>{formatDate(order.orderDate)}</TableCell>
+                      <TableCell>{formatCurrency(order.totalAmount)}</TableCell>
+                      <TableCell>
+                        <Badge variant={order.status === "completed" ? "default" : "secondary"}>
+                          {order.status}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <PermissionGuard permission="view:orders">
                           <Button
                             variant="ghost"
                             size="sm"
                             onClick={() => handleViewOrder(order)}
-                            data-testid={`button-view-order-${order.id}`}
+                            data-testid={`button-view-${order.orderNumber}`}
                           >
-                            <Eye className="h-4 w-4" />
+                            <Eye className="h-4 w-4 mr-2" />
+                            View
                           </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
+                        </PermissionGuard>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
 
-              {/* Mobile Card View */}
-              <div className="md:hidden space-y-4">
-                {currentOrders.map((order) => (
-                  <Card key={order.id} className="p-4">
-                    <div className="space-y-3">
-                      {/* Order Header */}
-                      <div className="flex items-start justify-between">
-                        <div className="space-y-1">
-                          <h3 className="font-semibold text-lg" data-testid={`text-order-number-${order.id}`}>
-                            {order.orderNumber}
-                          </h3>
-                          <p className="text-sm text-muted-foreground" data-testid={`text-order-date-${order.id}`}>
-                            {formatDate(order.orderDate)}
-                          </p>
-                        </div>
-                        <Badge
-                          variant={order.status === "completed" ? "default" : "secondary"}
-                          data-testid={`badge-status-${order.id}`}
-                        >
-                          {order.status}
-                        </Badge>
-                      </div>
-
-                      {/* Order Details */}
-                      <div className="flex items-center justify-between pt-2 border-t">
-                        <div>
-                          <span className="text-sm font-medium text-muted-foreground">Total Amount</span>
-                          <p className="text-xl font-bold text-primary" data-testid={`text-final-total-${order.id}`}>
-                            {formatCurrency(order.totalAmount)}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleViewOrder(order)}
-                          data-testid={`button-view-order-${order.id}`}
-                          className="flex items-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          View Details
-                        </Button>
-                      </div>
-                    </div>
-                  </Card>
-                ))}
-              </div>
-
-              {/* Pagination - Mobile Responsive */}
+              {/* Pagination */}
               {totalPages > 1 && (
-                <div className="mt-6 space-y-4">
-                  {/* Mobile Pagination Info */}
-                  <div className="text-center text-sm text-gray-600 dark:text-gray-300">
-                    Showing {startIndex + 1} to {Math.min(endIndex, filteredOrders.length)} of{" "}
-                    {filteredOrders.length} orders
+                <div className="flex items-center justify-between mt-6">
+                  <div className="text-sm text-gray-600 dark:text-gray-300">
+                    Showing {startIndex + 1} to {Math.min(endIndex, filteredOrders.length)} of {filteredOrders.length} orders
                   </div>
-                  
-                  {/* Pagination Controls */}
-                  <div className="flex items-center justify-center space-x-2">
+                  <div className="flex gap-2">
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handlePageChange(currentPage - 1)}
                       disabled={currentPage === 1}
-                      data-testid="button-previous-page"
-                      className="flex items-center gap-1"
+                      data-testid="button-prev-page"
                     >
                       <ChevronLeft className="h-4 w-4" />
-                      <span className="hidden sm:inline">Previous</span>
                     </Button>
-                    
-                    <div className="flex items-center space-x-1">
-                      <span className="text-sm font-medium px-3 py-1 bg-primary text-primary-foreground rounded" data-testid="text-page-info">
-                        {currentPage}
-                      </span>
-                      <span className="text-sm text-muted-foreground">of</span>
-                      <span className="text-sm font-medium">
-                        {totalPages}
-                      </span>
+                    <div className="flex items-center gap-2">
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        let pageNum;
+                        if (totalPages <= 5) {
+                          pageNum = i + 1;
+                        } else if (currentPage <= 3) {
+                          pageNum = i + 1;
+                        } else if (currentPage >= totalPages - 2) {
+                          pageNum = totalPages - 4 + i;
+                        } else {
+                          pageNum = currentPage - 2 + i;
+                        }
+                        return (
+                          <Button
+                            key={pageNum}
+                            variant={currentPage === pageNum ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handlePageChange(pageNum)}
+                            data-testid={`button-page-${pageNum}`}
+                          >
+                            {pageNum}
+                          </Button>
+                        );
+                      })}
                     </div>
-                    
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={() => handlePageChange(currentPage + 1)}
                       disabled={currentPage === totalPages}
                       data-testid="button-next-page"
-                      className="flex items-center gap-1"
                     >
-                      <span className="hidden sm:inline">Next</span>
                       <ChevronRight className="h-4 w-4" />
                     </Button>
                   </div>
@@ -862,13 +328,96 @@ export default function OrderManagement() {
         </CardContent>
       </Card>
 
-      {/* Order Details Modal - Mobile Responsive */}
+      {/* Orders Cards - Mobile */}
+      <div className="lg:hidden space-y-4">
+        {currentOrders.length === 0 ? (
+          <Card>
+            <CardContent className="pt-6 text-center text-gray-500">
+              {searchTerm ? "No orders found matching your search." : "No orders available."}
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {currentOrders.map((order) => (
+              <Card key={order.orderNumber} className="hover:shadow-lg transition-shadow">
+                <CardContent className="pt-6">
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <div className="font-semibold text-lg">{order.orderNumber}</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-300">{order.customerName}</div>
+                      </div>
+                      <Badge variant={order.status === "completed" ? "default" : "secondary"}>
+                        {order.status}
+                      </Badge>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <div className="text-gray-600 dark:text-gray-300">Date</div>
+                        <div className="font-medium">{formatDate(order.orderDate)}</div>
+                      </div>
+                      <div>
+                        <div className="text-gray-600 dark:text-gray-300">Total</div>
+                        <div className="font-bold text-primary">{formatCurrency(order.totalAmount)}</div>
+                      </div>
+                    </div>
+                    <PermissionGuard permission="view:orders">
+                      <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={() => handleViewOrder(order)}
+                        data-testid={`button-view-${order.orderNumber}`}
+                      >
+                        <Eye className="h-4 w-4 mr-2" />
+                        View Details
+                      </Button>
+                    </PermissionGuard>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+
+            {/* Mobile Pagination */}
+            {totalPages > 1 && (
+              <div className="flex flex-col gap-3">
+                <div className="text-sm text-center text-gray-600 dark:text-gray-300">
+                  Page {currentPage} of {totalPages}
+                </div>
+                <div className="flex gap-2 justify-center">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    data-testid="button-prev-page-mobile"
+                  >
+                    <ChevronLeft className="h-4 w-4 mr-1" />
+                    Previous
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    data-testid="button-next-page-mobile"
+                  >
+                    Next
+                    <ChevronRight className="h-4 w-4 ml-1" />
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* View Order Modal - Mobile Responsive */}
       <Dialog open={!!viewOrderModal} onOpenChange={() => setViewOrderModal(null)}>
-        <DialogContent className="w-[95vw] max-w-4xl h-[90vh] max-h-[80vh] overflow-y-auto p-4 sm:p-6">
+        <DialogContent className="w-[95vw] max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-lg sm:text-xl">Order Details</DialogTitle>
             <DialogDescription className="text-sm sm:text-base">
-              Complete information for {viewOrderModal?.orderNumber}
+              Complete information about order {viewOrderModal?.orderNumber}
             </DialogDescription>
           </DialogHeader>
           
@@ -921,27 +470,21 @@ export default function OrderManagement() {
                   const orderData = parseOrderData(viewOrderModal.items);
                   const { items, orderDiscountAmount, orderDiscountPercentage } = orderData;
                   
-                  // Calculate totals
                   let subtotal = 0;
                   let totalItemDiscounts = 0;
                   
                   items.forEach((item: any) => {
-                    // Calculate item base total
                     let itemTotal = 0;
                     if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                      // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
                       itemTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
                     } else if (item.itemSaleType === "Per PCS") {
-                      // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
                       itemTotal = item.liveWeight * item.price;
                     } else {
-                      // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
                       itemTotal = (item.liveWeight / 1000) * item.price;
                     }
                     
                     subtotal += itemTotal;
                     
-                    // Calculate item discount
                     let itemDiscount = 0;
                     if (item.discountPercentage > 0) {
                       itemDiscount += itemTotal * (item.discountPercentage / 100);
@@ -982,16 +525,12 @@ export default function OrderManagement() {
                           </TableHeader>
                           <TableBody>
                             {items.map((item: any, index: number) => {
-                              // Calculate item totals
                               let baseTotal = 0;
                               if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
-                                // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
                                 baseTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
                               } else if (item.itemSaleType === "Per PCS") {
-                                // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
                                 baseTotal = item.liveWeight * item.price;
                               } else {
-                                // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
                                 baseTotal = (item.liveWeight / 1000) * item.price;
                               }
                               
@@ -1035,7 +574,6 @@ export default function OrderManagement() {
                       {/* Mobile Card View - Order Items */}
                       <div className="lg:hidden space-y-3">
                         {items.map((item: any, index: number) => {
-                          // Calculate item totals
                           let baseTotal = 0;
                           if (item.itemSaleType === "Per PCS" && item.weightPerPCS) {
                             baseTotal = ((item.liveWeight / 1000) * item.weightPerPCS) * item.price;
@@ -1150,169 +688,6 @@ export default function OrderManagement() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* Import Preview Modal - Mobile Responsive */}
-      <Dialog open={importPreviewModal} onOpenChange={() => setImportPreviewModal(false)}>
-        <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[80vh] overflow-y-auto p-4 sm:p-6">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Import Preview</DialogTitle>
-            <DialogDescription className="text-sm sm:text-base">
-              Review the data before final import
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-6">
-            {/* Import Summary */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card>
-                <CardContent className="pt-4 sm:pt-6">
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-blue-600">{importData.length}</div>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Total Rows</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 sm:pt-6">
-                  <div className="text-center">
-                    <div className="text-xl sm:text-2xl font-bold text-green-600">{mergedOrders.length}</div>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Unique Orders</p>
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4 sm:pt-6">
-                  <div className="text-center">
-                    <div className={`text-xl sm:text-2xl font-bold ${importErrors.length > 0 ? 'text-red-600' : 'text-green-600'}`}>
-                      {importErrors.length}
-                    </div>
-                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-300">Validation Errors</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Validation Errors */}
-            {importErrors.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2 text-red-600">
-                    <AlertCircle className="h-5 w-5" />
-                    Validation Errors
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-h-40 overflow-y-auto space-y-2">
-                    {importErrors.map((error, index) => (
-                      <div key={index} className="p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-800 dark:text-red-200">
-                        {error}
-                      </div>
-                    ))}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Merged Orders Preview */}
-            {mergedOrders.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    Merged Orders Preview
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="max-h-60 overflow-y-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Order Number</TableHead>
-                          <TableHead>Order Date</TableHead>
-                          <TableHead>Items Count</TableHead>
-                          <TableHead>Estimated Total</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {mergedOrders.map((order, index) => {
-                          // Calculate estimated total - match import calculation logic
-                          let estimatedTotal = 0;
-                          order.items.forEach((item: any) => {
-                            // Simple calculation: liveWeight * price (same as export/import)
-                            // Note: weightPerPCS calculation would need item lookup, keeping it simple for preview
-                            let itemTotal = item.liveWeight * item.price;
-                            let discount = 0;
-                            if (item.discountPercentage > 0) {
-                              discount += itemTotal * (item.discountPercentage / 100);
-                            }
-                            if (item.discountAmount > 0) {
-                              discount += item.discountAmount;
-                            }
-                            estimatedTotal += Math.max(0, itemTotal - discount);
-                          });
-                          
-                          return (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium">{order.orderNumber}</TableCell>
-                              <TableCell>{order.orderDate}</TableCell>
-                              <TableCell>{order.items.length} items</TableCell>
-                              <TableCell>{formatCurrency(estimatedTotal)}</TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Progress Indicator */}
-            {submitImportMutation.isPending && importProgress.total > 0 && (
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-2">
-                    <div className="flex justify-between text-sm">
-                      <span>Importing orders...</span>
-                      <span>{importProgress.current} / {importProgress.total}</span>
-                    </div>
-                    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
-                      <div 
-                        className="bg-blue-600 h-2 rounded-full transition-all duration-300" 
-                        style={{ width: `${(importProgress.current / importProgress.total) * 100}%` }}
-                      ></div>
-                    </div>
-                    <p className="text-xs text-gray-600 dark:text-gray-300">
-                      Processing in batches to ensure reliable import...
-                    </p>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex justify-end gap-3">
-              <Button
-                variant="outline"
-                onClick={() => setImportPreviewModal(false)}
-                disabled={submitImportMutation.isPending}
-                data-testid="button-cancel-import"
-              >
-                Cancel
-              </Button>
-              <Button
-                onClick={() => submitImportMutation.mutate()}
-                disabled={mergedOrders.length === 0 || submitImportMutation.isPending}
-                data-testid="button-confirm-import"
-              >
-                {submitImportMutation.isPending 
-                  ? `Importing... (${importProgress.current}/${importProgress.total})` 
-                  : `Import ${mergedOrders.length} Orders`}
-              </Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
 
