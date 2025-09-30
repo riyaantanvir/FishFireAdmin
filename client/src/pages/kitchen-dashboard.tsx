@@ -42,7 +42,7 @@ export default function KitchenDashboard() {
   useEffect(() => {
     if (!allOrders || isLoading) return;
     
-    const newOrderCount = allOrders.filter(order => order.kitchenStatus === "New").length;
+    const newOrderCount = allOrders.filter(order => order.kitchenStatus === "Pending").length;
     
     // On first load, just initialize the count without notification
     if (!isInitialized) {
@@ -107,10 +107,10 @@ export default function KitchenDashboard() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "New":
-        return "bg-blue-500";
+      case "Pending":
+        return "bg-yellow-500";
       case "Preparing":
-        return "bg-orange-500";
+        return "bg-blue-500";
       case "Ready to Serve":
         return "bg-green-500";
       case "Served":
@@ -132,7 +132,7 @@ export default function KitchenDashboard() {
     let referenceTime: Date | null = null;
     
     switch (order.kitchenStatus) {
-      case "New":
+      case "Pending":
         referenceTime = order.kitchenReceivedAt ? new Date(order.kitchenReceivedAt) : new Date(order.createdAt || Date.now());
         break;
       case "Preparing":
@@ -196,18 +196,18 @@ export default function KitchenDashboard() {
   }
 
   return (
-    <div className="container mx-auto p-4 sm:p-6">
-      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+    <div className="container mx-auto p-4 sm:p-6 lg:p-8">
+      <div className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-3xl font-bold" data-testid="text-page-title">Kitchen Dashboard</h1>
-          <p className="text-muted-foreground" data-testid="text-page-description">
-            Manage order preparation workflow
+          <h1 className="text-4xl lg:text-5xl font-bold" data-testid="text-page-title">Kitchen Dashboard</h1>
+          <p className="text-lg text-muted-foreground mt-2" data-testid="text-page-description">
+            Live Order Preparation Monitor
           </p>
         </div>
         
         <div className="flex items-center gap-2">
           <Select value={filterType} onValueChange={handleFilterChange}>
-            <SelectTrigger className="w-[180px]" data-testid="select-date-filter">
+            <SelectTrigger className="w-[200px] text-lg" data-testid="select-date-filter">
               <SelectValue placeholder="Filter by date" />
             </SelectTrigger>
             <SelectContent>
@@ -219,31 +219,31 @@ export default function KitchenDashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {KITCHEN_STATUSES.map((status) => {
           const orders = getOrdersByStatus(status);
           const statusColor = getStatusColor(status);
           
           return (
             <div key={status} className="flex flex-col" data-testid={`column-${status.toLowerCase().replace(/\s+/g, '-')}`}>
-              <div className={`${statusColor} text-white p-4 rounded-t-lg`}>
+              <div className={`${statusColor} text-white p-5 rounded-t-lg shadow-lg`}>
                 <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-semibold flex items-center gap-2" data-testid={`text-status-${status.toLowerCase().replace(/\s+/g, '-')}`}>
-                    {status === "New" && <Clock className="h-5 w-5" />}
-                    {status === "Preparing" && <ChefHat className="h-5 w-5" />}
-                    {status === "Ready to Serve" && <CheckCircle className="h-5 w-5" />}
-                    {status === "Served" && <CheckCircle className="h-5 w-5" />}
+                  <h2 className="text-2xl lg:text-3xl font-bold flex items-center gap-3" data-testid={`text-status-${status.toLowerCase().replace(/\s+/g, '-')}`}>
+                    {status === "Pending" && <Clock className="h-7 w-7 lg:h-8 lg:w-8" />}
+                    {status === "Preparing" && <ChefHat className="h-7 w-7 lg:h-8 lg:w-8" />}
+                    {status === "Ready to Serve" && <CheckCircle className="h-7 w-7 lg:h-8 lg:w-8" />}
+                    {status === "Served" && <CheckCircle className="h-7 w-7 lg:h-8 lg:w-8" />}
                     {status}
                   </h2>
-                  <Badge variant="secondary" className="bg-white/20 text-white" data-testid={`badge-count-${status.toLowerCase().replace(/\s+/g, '-')}`}>
+                  <Badge variant="secondary" className="bg-white/30 text-white text-xl lg:text-2xl px-4 py-2 font-bold" data-testid={`badge-count-${status.toLowerCase().replace(/\s+/g, '-')}`}>
                     {orders.length}
                   </Badge>
                 </div>
               </div>
               
-              <div className="bg-muted/20 flex-1 p-4 rounded-b-lg space-y-3 min-h-[200px]">
+              <div className="bg-muted/20 flex-1 p-5 rounded-b-lg space-y-4 min-h-[300px]">
                 {orders.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8" data-testid={`text-empty-${status.toLowerCase().replace(/\s+/g, '-')}`}>
+                  <p className="text-center text-muted-foreground text-xl py-12" data-testid={`text-empty-${status.toLowerCase().replace(/\s+/g, '-')}`}>
                     No orders
                   </p>
                 ) : (
@@ -252,31 +252,31 @@ export default function KitchenDashboard() {
                     const items = parseOrderItems(order.items);
                     
                     return (
-                      <Card key={order.id} className="hover:shadow-md transition-shadow" data-testid={`card-order-${order.id}`}>
-                        <CardHeader className="pb-3">
+                      <Card key={order.id} className="hover:shadow-xl transition-shadow border-2" data-testid={`card-order-${order.id}`}>
+                        <CardHeader className="pb-4">
                           <div className="flex justify-between items-start">
                             <div>
-                              <CardTitle className="text-lg" data-testid={`text-order-number-${order.id}`}>
+                              <CardTitle className="text-2xl lg:text-3xl font-bold" data-testid={`text-order-number-${order.id}`}>
                                 #{order.orderNumber}
                               </CardTitle>
                               {order.customerName && (
-                                <p className="text-sm text-muted-foreground" data-testid={`text-customer-${order.id}`}>
+                                <p className="text-base lg:text-lg text-muted-foreground mt-1" data-testid={`text-customer-${order.id}`}>
                                   {order.customerName}
                                 </p>
                               )}
                             </div>
-                            <Badge variant="outline" className="text-xs" data-testid={`badge-time-${order.id}`}>
-                              <Clock className="h-3 w-3 mr-1" />
+                            <Badge variant="outline" className="text-sm lg:text-base px-3 py-1" data-testid={`badge-time-${order.id}`}>
+                              <Clock className="h-4 w-4 mr-1" />
                               {getElapsedTime(order)}
                             </Badge>
                           </div>
                         </CardHeader>
-                        <CardContent className="space-y-3">
-                          <div className="space-y-1" data-testid={`items-${order.id}`}>
+                        <CardContent className="space-y-4">
+                          <div className="space-y-2" data-testid={`items-${order.id}`}>
                             {items.map((item: any, idx: number) => (
-                              <div key={idx} className="text-sm flex justify-between" data-testid={`item-${order.id}-${idx}`}>
-                                <span className="font-medium">{item.name}</span>
-                                <span className="text-muted-foreground">
+                              <div key={idx} className="text-base lg:text-lg flex justify-between py-1" data-testid={`item-${order.id}-${idx}`}>
+                                <span className="font-semibold">{item.name}</span>
+                                <span className="text-muted-foreground font-medium">
                                   {item.quantity} {item.unit || "x"}
                                 </span>
                               </div>
@@ -285,8 +285,8 @@ export default function KitchenDashboard() {
                           
                           {nextStatus && (
                             <Button
-                              size="sm"
-                              className="w-full"
+                              size="lg"
+                              className="w-full text-lg font-semibold"
                               onClick={() => handleStatusUpdate(order.id, nextStatus)}
                               disabled={updateStatusMutation.isPending}
                               data-testid={`button-next-status-${order.id}`}
@@ -296,7 +296,7 @@ export default function KitchenDashboard() {
                               ) : (
                                 <>
                                   Move to {nextStatus}
-                                  <ArrowRight className="ml-2 h-4 w-4" />
+                                  <ArrowRight className="ml-2 h-5 w-5" />
                                 </>
                               )}
                             </Button>
