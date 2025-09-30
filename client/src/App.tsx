@@ -10,7 +10,6 @@ import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/auth-page";
 import Dashboard from "@/pages/dashboard";
 import DailyOrders from "@/pages/daily-orders";
-import KitchenDashboard from "@/pages/kitchen-dashboard";
 import ItemManagement from "@/pages/item-management";
 import OrderManagement from "@/pages/order-management";
 import ExpenseManagement from "@/pages/expense-management";
@@ -94,14 +93,6 @@ function Router() {
         component={() => (
           <DashboardLayout>
             <DailyOrders />
-          </DashboardLayout>
-        )} 
-      />
-      <ProtectedRoute 
-        path="/kitchen-dashboard" 
-        component={() => (
-          <DashboardLayout>
-            <KitchenDashboard />
           </DashboardLayout>
         )} 
       />
