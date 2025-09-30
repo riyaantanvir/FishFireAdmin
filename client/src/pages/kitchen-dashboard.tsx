@@ -27,7 +27,15 @@ export default function KitchenDashboard() {
         params.append("date", dateFilter);
       }
       const url = `/api/kitchen/orders${params.toString() ? `?${params.toString()}` : ""}`;
+      
+      // Get JWT token from localStorage
+      const token = localStorage.getItem('auth_token');
+      const headers: Record<string, string> = {
+        ...(token ? { "Authorization": `Bearer ${token}` } : {}),
+      };
+      
       const response = await fetch(url, {
+        headers,
         credentials: "include",
       });
       if (!response.ok) {
