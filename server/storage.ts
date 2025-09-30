@@ -326,7 +326,7 @@ export class MemStorage implements IStorage {
       status: insertOrder.status || "pending",
       paymentStatus: insertOrder.paymentStatus || "Unpaid",
       customerName: insertOrder.customerName || null,
-      kitchenStatus: insertOrder.kitchenStatus || "New",
+      kitchenStatus: insertOrder.kitchenStatus || "Pending",
       kitchenReceivedAt: insertOrder.kitchenReceivedAt || now,
       kitchenStartedAt: insertOrder.kitchenStartedAt || null,
       kitchenReadyAt: insertOrder.kitchenReadyAt || null,
@@ -916,7 +916,7 @@ export class MemStorage implements IStorage {
     
     // Set appropriate timestamp based on status
     switch (status) {
-      case "New":
+      case "Pending":
         updates.kitchenReceivedAt = now;
         break;
       case "Preparing":
