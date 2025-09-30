@@ -19,7 +19,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, AlertCircle } from "lucide-react";
+import { Search, Eye, ChevronLeft, ChevronRight, Download, Upload, FileText, AlertCircle, Pencil, Trash2 } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { usePermissions, PermissionGuard } from "@/hooks/use-permissions";
@@ -50,6 +50,11 @@ export default function OrderManagement() {
   const [viewOrderModal, setViewOrderModal] = useState<Order | null>(null);
   const [deleteAllModal, setDeleteAllModal] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  
+  // Edit/Delete states
+  const [editOrderModal, setEditOrderModal] = useState<Order | null>(null);
+  const [deleteOrderModal, setDeleteOrderModal] = useState<Order | null>(null);
+  const [deleteConfirmText, setDeleteConfirmText] = useState("");
   
   // Import/Export states
   const [importPreviewModal, setImportPreviewModal] = useState(false);
@@ -132,6 +137,14 @@ export default function OrderManagement() {
 
   const handleViewOrder = (order: Order) => {
     setViewOrderModal(order);
+  };
+
+  const handleEditOrder = (order: Order) => {
+    setEditOrderModal(order);
+  };
+
+  const handleDeleteOrder = (order: Order) => {
+    setDeleteOrderModal(order);
   };
 
   const handlePageChange = (page: number) => {
@@ -487,6 +500,51 @@ export default function OrderManagement() {
     },
   });
 
+  // Edit order mutation
+  const editOrderMutation = useMutation({
+    mutationFn: async (data: { orderNumber: string; updates: Partial<Order> }) => {
+      return apiRequest("PUT", `/api/orders/${data.orderNumber}`, data.updates);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setEditOrderModal(null);
+      toast({
+        title: "Order updated",
+        description: "Order has been updated successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Update failed",
+        description: "Failed to update order. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete single order mutation
+  const deleteOrderMutation = useMutation({
+    mutationFn: async (orderNumber: string) => {
+      return apiRequest("DELETE", `/api/orders/${orderNumber}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/orders"] });
+      setDeleteOrderModal(null);
+      setDeleteConfirmText("");
+      toast({
+        title: "Order deleted",
+        description: "Order has been deleted successfully.",
+      });
+    },
+    onError: () => {
+      toast({
+        title: "Delete failed",
+        description: "Failed to delete order. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
   if (ordersLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -645,17 +703,42 @@ export default function OrderManagement() {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        <PermissionGuard permission="view:orders">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleViewOrder(order)}
-                            data-testid={`button-view-${order.orderNumber}`}
-                          >
-                            <Eye className="h-4 w-4 mr-2" />
-                            View
-                          </Button>
-                        </PermissionGuard>
+                        <div className="flex items-center gap-2">
+                          <PermissionGuard permission="view:orders">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleViewOrder(order)}
+                              data-testid={`button-view-${order.orderNumber}`}
+                            >
+                              <Eye className="h-4 w-4 mr-2" />
+                              View
+                            </Button>
+                          </PermissionGuard>
+                          <PermissionGuard permission="edit:orders">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => handleEditOrder(order)}
+                              data-testid={`button-edit-${order.orderNumber}`}
+                            >
+                              <Pencil className="h-4 w-4 mr-2" />
+                              Edit
+                            </Button>
+                          </PermissionGuard>
+                          <PermissionGuard permission="delete:orders">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                              onClick={() => handleDeleteOrder(order)}
+                              data-testid={`button-delete-${order.orderNumber}`}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete
+                            </Button>
+                          </PermissionGuard>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -753,17 +836,41 @@ export default function OrderManagement() {
                         <div className="font-bold text-primary">{formatCurrency(order.totalAmount)}</div>
                       </div>
                     </div>
-                    <PermissionGuard permission="view:orders">
-                      <Button
-                        variant="outline"
-                        className="w-full"
-                        onClick={() => handleViewOrder(order)}
-                        data-testid={`button-view-${order.orderNumber}`}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View Details
-                      </Button>
-                    </PermissionGuard>
+                    <div className="flex gap-2">
+                      <PermissionGuard permission="view:orders">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleViewOrder(order)}
+                          data-testid={`button-view-${order.orderNumber}`}
+                        >
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
+                        </Button>
+                      </PermissionGuard>
+                      <PermissionGuard permission="edit:orders">
+                        <Button
+                          variant="outline"
+                          className="flex-1"
+                          onClick={() => handleEditOrder(order)}
+                          data-testid={`button-edit-${order.orderNumber}`}
+                        >
+                          <Pencil className="h-4 w-4 mr-2" />
+                          Edit
+                        </Button>
+                      </PermissionGuard>
+                      <PermissionGuard permission="delete:orders">
+                        <Button
+                          variant="outline"
+                          className="flex-1 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-900/20"
+                          onClick={() => handleDeleteOrder(order)}
+                          data-testid={`button-delete-${order.orderNumber}`}
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" />
+                          Delete
+                        </Button>
+                      </PermissionGuard>
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -1465,6 +1572,150 @@ export default function OrderManagement() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Order Modal */}
+      <Dialog open={!!editOrderModal} onOpenChange={() => setEditOrderModal(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Order</DialogTitle>
+            <DialogDescription>
+              Update order details for {editOrderModal?.orderNumber}
+            </DialogDescription>
+          </DialogHeader>
+
+          {editOrderModal && (
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Customer Name</label>
+                <Input
+                  value={editOrderModal.customerName || ''}
+                  onChange={(e) => setEditOrderModal({ ...editOrderModal, customerName: e.target.value })}
+                  data-testid="input-edit-customer"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Order Date</label>
+                <Input
+                  type="date"
+                  value={new Date(editOrderModal.orderDate).toISOString().split('T')[0]}
+                  onChange={(e) => setEditOrderModal({ ...editOrderModal, orderDate: e.target.value })}
+                  data-testid="input-edit-date"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Total Amount (TK)</label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  value={editOrderModal.totalAmount}
+                  onChange={(e) => setEditOrderModal({ ...editOrderModal, totalAmount: e.target.value })}
+                  data-testid="input-edit-total"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium">Status</label>
+                <select
+                  className="w-full border rounded p-2"
+                  value={editOrderModal.status}
+                  onChange={(e) => setEditOrderModal({ ...editOrderModal, status: e.target.value as 'pending' | 'completed' })}
+                  data-testid="select-edit-status"
+                >
+                  <option value="pending">Pending</option>
+                  <option value="completed">Completed</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => setEditOrderModal(null)}
+                  data-testid="button-cancel-edit"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    editOrderMutation.mutate({
+                      orderNumber: editOrderModal.orderNumber,
+                      updates: {
+                        customerName: editOrderModal.customerName,
+                        orderDate: editOrderModal.orderDate,
+                        totalAmount: editOrderModal.totalAmount,
+                        status: editOrderModal.status,
+                      },
+                    });
+                  }}
+                  disabled={editOrderMutation.isPending}
+                  data-testid="button-save-edit"
+                >
+                  {editOrderMutation.isPending ? "Saving..." : "Save Changes"}
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Order Confirmation Modal */}
+      <Dialog open={!!deleteOrderModal} onOpenChange={() => {
+        setDeleteOrderModal(null);
+        setDeleteConfirmText("");
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-red-600">Delete Order</DialogTitle>
+            <DialogDescription>
+              This action will permanently delete order {deleteOrderModal?.orderNumber} and cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded p-3">
+              <p className="text-sm text-red-800 dark:text-red-200">
+                <strong>Warning:</strong> This will permanently delete this order including all its items and transaction details.
+              </p>
+            </div>
+            
+            <div>
+              <label className="text-sm font-medium">
+                Type <code className="bg-gray-100 dark:bg-gray-800 px-1 rounded">DELETE</code> to confirm:
+              </label>
+              <Input
+                value={deleteConfirmText}
+                onChange={(e) => setDeleteConfirmText(e.target.value)}
+                placeholder="DELETE"
+                className="mt-2"
+                data-testid="input-delete-single-confirmation"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteOrderModal(null);
+                setDeleteConfirmText("");
+              }}
+              data-testid="button-cancel-delete-single"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteOrderModal) {
+                  deleteOrderMutation.mutate(deleteOrderModal.orderNumber);
+                }
+              }}
+              disabled={deleteConfirmText !== "DELETE" || deleteOrderMutation.isPending}
+              data-testid="button-confirm-delete-single"
+            >
+              {deleteOrderMutation.isPending ? "Deleting..." : "Delete Order"}
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
