@@ -85,32 +85,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/orders/:id", authenticateJWT, async (req, res) => {
-    try {
-      const deleted = await storage.deleteOrder(req.params.id);
-      if (!deleted) {
-        return res.status(404).json({ message: "Order not found" });
-      }
-      
-      // Audit log (separate try/catch to not affect primary operation)
-      try {
-        await storage.createAuditLog({
-          userId: req.user!.id,
-          action: `Deleted order #${req.params.id}`,
-          resource: 'order',
-          resourceId: req.params.id
-        });
-      } catch (auditError) {
-        console.warn('Audit log failed for order deletion:', auditError);
-      }
-      
-      res.sendStatus(204);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to delete order" });
-    }
-  });
-
-  // Bulk delete all orders endpoint - admin only
+  // Bulk delete all orders endpoint - admin only (must be before /:id route)
   app.delete("/api/orders", authenticateJWT, async (req, res) => {
     try {
       // Check if user has admin role
@@ -136,6 +111,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Clear orders error:', error);
       res.status(500).json({ message: "Failed to delete orders" });
+    }
+  });
+
+  app.delete("/api/orders/:id", authenticateJWT, async (req, res) => {
+    try {
+      const deleted = await storage.deleteOrder(req.params.id);
+      if (!deleted) {
+        return res.status(404).json({ message: "Order not found" });
+      }
+      
+      // Audit log (separate try/catch to not affect primary operation)
+      try {
+        await storage.createAuditLog({
+          userId: req.user!.id,
+          action: `Deleted order #${req.params.id}`,
+          resource: 'order',
+          resourceId: req.params.id
+        });
+      } catch (auditError) {
+        console.warn('Audit log failed for order deletion:', auditError);
+      }
+      
+      res.sendStatus(204);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to delete order" });
     }
   });
 
