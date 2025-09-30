@@ -118,3 +118,10 @@ The application is configured for modern development workflows:
 - Replaced tab-based reports with three dedicated report tables: Payment & Sales Report, Stock Report, and Expense Report
 - Added Example CSV download feature to Expense Management for users to understand the expected CSV format
 - Example CSV includes realistic fish business expense data with proper field formatting for easy import template
+
+### September 30, 2025 - Seed Items System & Kitchen Dashboard Fixes
+- Implemented automatic seed items creation on server startup (8 default fish items persist after restart)
+- Fixed critical Kitchen Dashboard authentication bug - now properly sends JWT token in API requests
+- Enhanced status workflow: Pending (Yellow) → Preparing (Blue) → Ready to Serve (Green) → Served (Gray)
+- Updated Kitchen Dashboard for TV/large screen display with enhanced fonts and spacing
+- Seed items include: Tilapia, Rui, Katla, Hilsa, Pangas, Shrimp, Crab, Lobster with realistic prices
