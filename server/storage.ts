@@ -271,6 +271,43 @@ export class MemStorage implements IStorage {
     }
 
     console.log(`Created admin user with ID: ${adminUser.id}`);
+    
+    // Create default items
+    this.createDefaultItems();
+  }
+
+  private createDefaultItems() {
+    const today = new Date().toISOString().split('T')[0];
+    
+    const defaultItems = [
+      { name: "Tilapia Fish", saleType: "Per KG", price: 250, unit: "KG" },
+      { name: "Rui Fish", saleType: "Per KG", price: 350, unit: "KG" },
+      { name: "Katla Fish", saleType: "Per KG", price: 300, unit: "KG" },
+      { name: "Hilsa Fish", saleType: "Per KG", price: 1200, unit: "KG" },
+      { name: "Pangas Fish", saleType: "Per KG", price: 180, unit: "KG" },
+      { name: "Shrimp", saleType: "Per KG", price: 800, unit: "KG" },
+      { name: "Crab", saleType: "Per PCS", price: 150, unit: "PCS" },
+      { name: "Lobster", saleType: "Per PCS", price: 500, unit: "PCS" },
+    ];
+
+    let itemNumber = 1;
+    defaultItems.forEach(itemData => {
+      const id = randomUUID();
+      const item: Item = {
+        id,
+        itemNumber,
+        date: today,
+        name: itemData.name,
+        saleType: itemData.saleType,
+        price: itemData.price.toString(),
+        unit: itemData.unit,
+        createdAt: new Date()
+      };
+      this.items.set(id, item);
+      itemNumber++;
+    });
+
+    console.log(`Created ${defaultItems.length} default items`);
   }
 
   private async hashPassword(password: string): Promise<string> {
