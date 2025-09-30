@@ -268,22 +268,48 @@ export class MemStorage implements IStorage {
 
     console.log(`Created admin user with ID: ${adminUser.id}`);
     
+    // Create default item types
+    this.createDefaultItemTypes();
+    
     // Create default items
     this.createDefaultItems();
+  }
+
+  private createDefaultItemTypes() {
+    const defaultTypes = [
+      { name: "Fish", description: "Fish and seafood items" },
+      { name: "Non Fish", description: "Non-fish food items" },
+      { name: "Drinks", description: "Beverages and drinks" },
+      { name: "Coffee", description: "Coffee and coffee-based drinks" },
+    ];
+
+    defaultTypes.forEach(typeData => {
+      const id = randomUUID();
+      const itemType: ItemType = {
+        id,
+        name: typeData.name,
+        description: typeData.description,
+        isActive: "true",
+        createdAt: new Date()
+      };
+      this.itemTypes.set(id, itemType);
+    });
+
+    console.log(`Created ${defaultTypes.length} default item types`);
   }
 
   private createDefaultItems() {
     const today = new Date().toISOString().split('T')[0];
     
     const defaultItems = [
-      { name: "Tilapia Fish", saleType: "Per KG", price: 250, unit: "KG" },
-      { name: "Rui Fish", saleType: "Per KG", price: 350, unit: "KG" },
-      { name: "Katla Fish", saleType: "Per KG", price: 300, unit: "KG" },
-      { name: "Hilsa Fish", saleType: "Per KG", price: 1200, unit: "KG" },
-      { name: "Pangas Fish", saleType: "Per KG", price: 180, unit: "KG" },
-      { name: "Shrimp", saleType: "Per KG", price: 800, unit: "KG" },
-      { name: "Crab", saleType: "Per PCS", price: 150, unit: "PCS" },
-      { name: "Lobster", saleType: "Per PCS", price: 500, unit: "PCS" },
+      { name: "Tilapia Fish", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 250 },
+      { name: "Rui Fish", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 350 },
+      { name: "Katla Fish", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 300 },
+      { name: "Hilsa Fish", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 1200 },
+      { name: "Pangas Fish", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 180 },
+      { name: "Shrimp", itemType: "Fish", itemSaleType: "Per KG", sellingPricePerKG: 800 },
+      { name: "Crab", itemType: "Fish", itemSaleType: "Per PCS", sellingPricePerPCS: 150 },
+      { name: "Lobster", itemType: "Fish", itemSaleType: "Per PCS", sellingPricePerPCS: 500 },
     ];
 
     let itemNumber = 1;
@@ -294,9 +320,16 @@ export class MemStorage implements IStorage {
         itemNumber,
         date: today,
         name: itemData.name,
-        saleType: itemData.saleType,
-        price: itemData.price.toString(),
-        unit: itemData.unit,
+        itemType: itemData.itemType,
+        itemSaleType: itemData.itemSaleType,
+        weightPerPCS: null,
+        sellingPricePerKG: itemData.sellingPricePerKG ? itemData.sellingPricePerKG.toString() : null,
+        sellingPricePerPCS: itemData.sellingPricePerPCS ? itemData.sellingPricePerPCS.toString() : null,
+        description: null,
+        price: (itemData.sellingPricePerKG || itemData.sellingPricePerPCS || 0).toString(),
+        stock: 0,
+        category: itemData.itemType,
+        isActive: "true",
         createdAt: new Date()
       };
       this.items.set(id, item);
