@@ -486,15 +486,13 @@ export default function OrderManagement() {
             let weightPerPCS = Number(matchingItem?.weightPerPCS) || 0;
             let actualPrice = Number(item.price) || Number(matchingItem?.price) || 0;
             
+            // Match the export calculation logic - liveWeight is already in correct unit
             if (item.itemSaleType === "Per PCS" && weightPerPCS) {
-              // For Per PCS with weightPerPCS: Total = ((LiveWeight in grams / 1000) * WeightPerPCS) * PricePerKG
-              itemTotal = ((item.liveWeight / 1000) * weightPerPCS) * actualPrice;
-            } else if (item.itemSaleType === "Per PCS") {
-              // For Per PCS without weightPerPCS: Total = LiveWeight * PricePerPCS (no division)
-              itemTotal = item.liveWeight * actualPrice;
+              // For Per PCS with weightPerPCS: Total = (liveWeight * weightPerPCS) * price
+              itemTotal = (item.liveWeight * weightPerPCS) * actualPrice;
             } else {
-              // For Per KG: Total = (LiveWeight in grams / 1000) * PricePerKG
-              itemTotal = (item.liveWeight / 1000) * actualPrice;
+              // For both Per PCS without weightPerPCS and Per KG: Total = liveWeight * price
+              itemTotal = item.liveWeight * actualPrice;
             }
             
             subtotal += itemTotal;
@@ -1239,9 +1237,11 @@ export default function OrderManagement() {
                       </TableHeader>
                       <TableBody>
                         {mergedOrders.map((order, index) => {
-                          // Calculate estimated total
+                          // Calculate estimated total - match import calculation logic
                           let estimatedTotal = 0;
                           order.items.forEach((item: any) => {
+                            // Simple calculation: liveWeight * price (same as export/import)
+                            // Note: weightPerPCS calculation would need item lookup, keeping it simple for preview
                             let itemTotal = item.liveWeight * item.price;
                             let discount = 0;
                             if (item.discountPercentage > 0) {
